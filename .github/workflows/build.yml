@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  VS_VERSION: "1.22.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download Vintage Story game assemblies
+        run: |
+          curl -sSL "https://cdn.vintagestory.at/gamefiles/stable/vs_server_linux-x64_${VS_VERSION}.tar.gz" -o vs_server.tar.gz
+          mkdir -p "$HOME/vintagestory"
+          tar -xzf vs_server.tar.gz -C "$HOME/vintagestory"
+          echo "VINTAGE_STORY=$HOME/vintagestory" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: dotnet build PicoRecipes/PicoRecipes.csproj -c Release
+
+      - name: Package mod zip
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('PicoRecipes/modinfo.json'))['version'])")
+          cd PicoRecipes/bin/Release/Mods/picorecipes
+          zip -r "$GITHUB_WORKSPACE/picorecipes_${VERSION}.zip" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: picorecipes
+          path: picorecipes_*.zip

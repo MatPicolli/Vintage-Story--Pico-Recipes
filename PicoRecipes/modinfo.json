@@ -1,0 +1,15 @@
+{
+    "$schema": "https://moddbcdn.vintagestory.at/schema/modinfo.latest.json",
+    "type": "code",
+    "modid": "picorecipes",
+    "name": "Pico Recipes",
+    "authors": [ "MatPicolli" ],
+    "description": "A 'Just Enough Items' (JEI) style item and recipe browser. Shows a searchable item list next to your inventory; click any item to see how to craft it (left click / R) or what it is used for (right click / U).",
+    "version": "0.1.0",
+    "side": "Universal",
+    "requiredOnClient": false,
+    "requiredOnServer": false,
+    "dependencies": {
+        "game": "1.22.0"
+    }
+}
