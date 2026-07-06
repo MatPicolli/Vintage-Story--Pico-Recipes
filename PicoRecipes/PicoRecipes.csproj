@@ -8,20 +8,40 @@
     <Nullable>disable</Nullable>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>bin\$(Configuration)\Mods\picorecipes</OutputPath>
-    <!-- Point VINTAGE_STORY at your game installation folder (the one containing VintagestoryAPI.dll) -->
   </PropertyGroup>
+
+  <!--
+    Locating the game: uses the VINTAGE_STORY environment variable if set, otherwise
+    probes the usual installation folders. The game folder is the one that contains
+    VintagestoryAPI.dll.
+  -->
+  <PropertyGroup>
+    <VsGameFolder>$(VINTAGE_STORY)</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">$(APPDATA)/Vintagestory</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">$(USERPROFILE)/Desktop/Vintagestory</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">$(LOCALAPPDATA)/Vintagestory</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">C:/Program Files/Vintagestory</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">$(HOME)/.local/share/vintagestory</VsGameFolder>
+    <VsGameFolder Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')">$(HOME)/ApplicationData/vintagestory</VsGameFolder>
+  </PropertyGroup>
+
+  <Target Name="EnsureGameAssemblies" BeforeTargets="BeforeCompile">
+    <Error Condition="!Exists('$(VsGameFolder)/VintagestoryAPI.dll')"
+           Text="Vintage Story installation not found. Set the VINTAGE_STORY environment variable to your game folder (the one containing VintagestoryAPI.dll), e.g.: setx VINTAGE_STORY &quot;C:\Users\you\Desktop\Vintagestory&quot; (then open a new terminal)." />
+    <Message Importance="high" Text="Using Vintage Story assemblies from: $(VsGameFolder)" />
+  </Target>
 
   <ItemGroup>
     <Reference Include="VintagestoryAPI">
-      <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
+      <HintPath>$(VsGameFolder)/VintagestoryAPI.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="protobuf-net">
-      <HintPath>$(VINTAGE_STORY)/Lib/protobuf-net.dll</HintPath>
+      <HintPath>$(VsGameFolder)/Lib/protobuf-net.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="cairo-sharp">
-      <HintPath>$(VINTAGE_STORY)/Lib/cairo-sharp.dll</HintPath>
+      <HintPath>$(VsGameFolder)/Lib/cairo-sharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

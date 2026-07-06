@@ -41,14 +41,23 @@ Drop the release zip (`picorecipes_x.y.z.zip`) into your `Mods` folder
 ## Building from source
 
 1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
-2. Set the `VINTAGE_STORY` environment variable to your game installation folder
-   (the directory containing `VintagestoryAPI.dll`). The freely downloadable
-   [dedicated server package](https://account.vintagestory.at/downloads) works too.
-3. Build:
+2. Build:
 
    ```sh
    dotnet build PicoRecipes/PicoRecipes.csproj -c Release
    ```
+
+The build looks for your game installation (the folder containing `VintagestoryAPI.dll`)
+in the usual places automatically: `%AppData%\Vintagestory`, `Desktop\Vintagestory`,
+`%LocalAppData%\Vintagestory`, `C:\Program Files\Vintagestory` and `~/.local/share/vintagestory`.
+If yours lives somewhere else, set the `VINTAGE_STORY` environment variable to that folder, e.g.
+
+```powershell
+setx VINTAGE_STORY "D:\Games\Vintagestory"   # then open a new terminal
+```
+
+The freely downloadable [dedicated server package](https://account.vintagestory.at/downloads)
+also works as an assembly source.
 
 The ready-to-use mod folder lands in `PicoRecipes/bin/Release/Mods/picorecipes`; zip its
 *contents* (so `modinfo.json` is at the zip root) to get an installable mod. The GitHub Actions
