@@ -31,11 +31,6 @@ namespace PicoRecipes
         public override bool PrefersUngrabbedMouse => true;
         public override bool UnregisterOnClose => false;
 
-        // Keep the mouse cursor free while the browser is open. Without this, closing the inventory
-        // with E re-grabs the mouse and the game closes this window along with it; with it, the
-        // browser stays open as a standalone window until you close it (Escape or the Close button).
-        public override bool DisableMouseGrab => true;
-
         // Draw above the player/chest inventory (0.2) so it is never hidden behind it,
         // and take input before the inventory (lower InputOrder = handled first).
         public override double DrawOrder => 0.26;

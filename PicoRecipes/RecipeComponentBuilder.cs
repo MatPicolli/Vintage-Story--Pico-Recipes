@@ -227,8 +227,9 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render each
-        /// layer as its own small pixel grid so multi-layer recipes (clay, smithing) read as steps.
+        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render a
+        /// single top-down silhouette (all layers merged) as one small pixel grid. (Rendering each
+        /// layer separately overlapped badly for larger shapes, so it is one clean grid instead.)
         /// </summary>
         void AddVoxelPatterns(List<RichTextComponentBase> components, RecipeBase recipe)
         {
@@ -250,44 +251,29 @@ namespace PicoRecipes
 
                 if (rows == 0 || cols == 0) return;
 
-                components.Add(new ClearFloatTextComponent(capi, 4));
-
-                bool multi = pattern.Length > 1;
-                for (int layer = 0; layer < pattern.Length; layer++)
+                var merged = new bool[rows, cols];
+                for (int j = 0; j < rows; j++)
                 {
-                    if (multi && layer > 0)
+                    for (int z = 0; z < cols; z++)
                     {
-                        components.Add(new RichTextComponent(capi, "→", CairoFont.WhiteMediumText())
+                        bool filled = false;
+                        foreach (string[] layer in pattern)
                         {
-                            VerticalAlign = EnumVerticalAlign.Middle,
-                            PaddingLeft = 4,
-                            PaddingRight = 4
-                        });
+                            if (layer == null || j >= layer.Length) continue;
+                            string row = layer[j];
+                            if (row == null || z >= row.Length) continue;
+                            char ch = row[z];
+                            if (ch != '_' && ch != ' ') { filled = true; break; }
+                        }
+                        merged[j, z] = filled;
                     }
-
-                    components.Add(new VoxelPatternComponent(capi, LayerToGrid(pattern[layer], rows, cols)) { PaddingLeft = 6 });
                 }
 
+                components.Add(new ClearFloatTextComponent(capi, 4));
+                components.Add(new VoxelPatternComponent(capi, merged) { PaddingLeft = 6 });
                 components.Add(new ClearFloatTextComponent(capi, 4));
             }
             catch (Exception) { }
-        }
-
-        static bool[,] LayerToGrid(string[] layer, int rows, int cols)
-        {
-            var g = new bool[rows, cols];
-            if (layer == null) return g;
-            for (int j = 0; j < rows && j < layer.Length; j++)
-            {
-                string row = layer[j];
-                if (row == null) continue;
-                for (int z = 0; z < cols && z < row.Length; z++)
-                {
-                    char ch = row[z];
-                    g[j, z] = ch != '_' && ch != ' ';
-                }
-            }
-            return g;
         }
 
         /// <summary>Renders one recipe as: [ingredient] + [ingredient] = [output]  (extra info)</summary>

@@ -50,7 +50,7 @@ namespace PicoRecipes
         readonly ICoreClientAPI capi;
 
         public List<ItemStack> AllStacks { get; private set; } = new List<ItemStack>();
-        /// <summary>Lowercased searchable text (display name + code) parallel to AllStacks.</summary>
+        /// <summary>Lowercased searchable text (item code) parallel to AllStacks.</summary>
         public List<string> SearchTexts { get; private set; } = new List<string>();
 
         List<RecipeBase> smithing = new List<RecipeBase>();
@@ -58,52 +58,87 @@ namespace PicoRecipes
         List<RecipeBase> clayforming = new List<RecipeBase>();
         List<RecipeBase> barrel = new List<RecipeBase>();
 
-        bool loaded;
+        volatile bool ready;
+        bool started;
+
+        /// <summary>True once the item index has finished building on the background thread.</summary>
+        public bool Ready => ready;
 
         public RecipeIndex(ICoreClientAPI capi)
         {
             this.capi = capi;
         }
 
+        /// <summary>
+        /// Kicks off the index build on a background thread (the way the vanilla handbook does).
+        /// Building it on the main thread froze the client for minutes on a full modpack.
+        /// </summary>
         public void EnsureLoaded()
         {
-            if (loaded) return;
-            loaded = true;
+            if (started) return;
+            started = true;
 
-            BuildStackList();
-            LoadSurvivalRecipes();
+            TyronThreadPool.QueueTask(BuildInBackground, "picorecipes-index");
         }
 
-        void BuildStackList()
+        void BuildInBackground()
         {
-            AllStacks.Clear();
-            SearchTexts.Clear();
+            try
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                var stacks = BuildStackList();
+                LoadSurvivalRecipes();
+
+                // Publish the finished lists, then flag ready (volatile write orders it after the
+                // list assignments, so main-thread readers that see Ready==true see full lists).
+                AllStacks = stacks.stacks;
+                SearchTexts = stacks.texts;
+                ready = true;
+
+                capi.Logger.Notification("[picorecipes] Indexed {0} item stacks in {1} ms", AllStacks.Count, sw.ElapsedMilliseconds);
+            }
+            catch (Exception e)
+            {
+                capi.Logger.Error("[picorecipes] Failed to build item index: {0}", e);
+                ready = true; // don't get stuck on "Loading..." forever
+            }
+        }
+
+        (List<ItemStack> stacks, List<string> texts) BuildStackList()
+        {
+            var stacks = new List<ItemStack>();
+            var texts = new List<string>();
 
             foreach (CollectibleObject obj in capi.World.Collectibles)
             {
                 if (obj?.Code == null) continue;
 
-                List<ItemStack> stacks;
+                List<ItemStack> objStacks;
                 try
                 {
-                    stacks = obj.GetHandBookStacks(capi);
+                    objStacks = obj.GetHandBookStacks(capi);
                 }
                 catch (Exception)
                 {
                     continue;
                 }
-                if (stacks == null) continue;
+                if (objStacks == null) continue;
 
-                foreach (ItemStack stack in stacks)
+                foreach (ItemStack stack in objStacks)
                 {
                     if (stack?.Collectible == null) continue;
-                    AllStacks.Add(stack);
+                    stacks.Add(stack);
 
+                    // Search on the localized name + the code. This runs on the background thread,
+                    // so the (previously main-thread) name resolution no longer freezes the client.
                     string name;
-                    try { name = stack.GetName(); } catch (Exception) { name = stack.Collectible.Code.ToShortString(); }
-                    SearchTexts.Add(((name ?? "") + " " + stack.Collectible.Code.ToString()).ToLowerInvariant());
+                    try { name = stack.GetName(); } catch (Exception) { name = null; }
+                    texts.Add(((name ?? "") + " " + stack.Collectible.Code).ToLowerInvariant());
                 }
             }
+
+            return (stacks, texts);
         }
 
         void LoadSurvivalRecipes()

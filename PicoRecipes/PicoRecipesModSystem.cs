@@ -156,6 +156,10 @@ namespace PicoRecipes
         {
             if (capi.World?.Player == null || ItemListDialog == null) return;
 
+            // Start building the item index in the background as soon as the world is ready, so it
+            // is done (or nearly) by the time the overlay is first opened. Idempotent.
+            RecipeIndex.EnsureLoaded();
+
             bool inventoryOpen = capi.Gui.OpenedGuis.Any(IsInventoryLikeDialog);
             bool shouldShow = Enabled && inventoryOpen;
 
@@ -171,7 +175,11 @@ namespace PicoRecipes
             bool overlayVisible = ItemListDialog.IsOpened();
             UpdateMinimap(overlayVisible);
 
-            if (overlayVisible) ItemListDialog.UpdateHoverPreview(dt);
+            if (overlayVisible)
+            {
+                ItemListDialog.RefreshIfIndexReady();
+                ItemListDialog.UpdateHoverPreview(dt);
+            }
             else HoverDialog.Hide();
         }
 

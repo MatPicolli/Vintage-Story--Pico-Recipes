@@ -35,6 +35,9 @@ namespace PicoRecipes
         int lastHoverSlotId = -1;
         float hoverAccumSec;
 
+        // Whether the (background-built) item index has been shown yet
+        bool populated;
+
         public override string ToggleKeyCombinationCode => null;
         public override bool PrefersUngrabbedMouse => true;
         public override bool UnregisterOnClose => false;
@@ -59,9 +62,21 @@ namespace PicoRecipes
 
             // Reset the search each time the overlay opens, but keep the page you were on.
             searchText = "";
+            populated = mod.RecipeIndex.Ready;
 
             ApplyFilter();
             ComposeDialog();
+        }
+
+        /// <summary>
+        /// Called each tick while open: once the background index finishes, fill the grid in.
+        /// </summary>
+        public void RefreshIfIndexReady()
+        {
+            if (populated || !mod.RecipeIndex.Ready) return;
+            populated = true;
+            ApplyFilter();
+            FillPage();
         }
 
         public override void OnGuiClosed()
@@ -168,6 +183,10 @@ namespace PicoRecipes
                 needle = space > 0 ? needle.Substring(space + 1).Trim() : "";
             }
 
+            // Word-based match: every whitespace-separated term must appear, in any order, so
+            // "copper axe" matches the code "axe-copper".
+            string[] words = needle.Length == 0 ? System.Array.Empty<string>() : needle.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+
             for (int i = 0; i < index.AllStacks.Count; i++)
             {
                 if (domainFilter != null && domainFilter.Length > 0)
@@ -176,10 +195,14 @@ namespace PicoRecipes
                     if (domain == null || !domain.StartsWithOrdinal(domainFilter)) continue;
                 }
 
-                if (needle.Length == 0 || index.SearchTexts[i].Contains(needle))
+                string text = index.SearchTexts[i];
+                bool allMatch = true;
+                foreach (string w in words)
                 {
-                    filteredIndices.Add(i);
+                    if (!text.Contains(w)) { allMatch = false; break; }
                 }
+
+                if (allMatch) filteredIndices.Add(i);
             }
         }
 
@@ -216,9 +239,10 @@ namespace PicoRecipes
                 }
             }
 
-            Composers[GridKey].GetDynamicText("pagelabel")?.SetNewText(
-                $"{page + 1} / {PageCount}  ({filteredIndices.Count})"
-            );
+            string label = mod.RecipeIndex.Ready
+                ? $"{page + 1} / {PageCount}  ({filteredIndices.Count})"
+                : Loc.T("loading-items", "Loading item list...");
+            Composers[GridKey].GetDynamicText("pagelabel")?.SetNewText(label);
 
             // The visible items changed; drop any stale hover preview.
             lastHoverSlotId = -1;
