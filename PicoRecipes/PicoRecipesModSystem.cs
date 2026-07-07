@@ -65,7 +65,7 @@ namespace PicoRecipes
         {
             if (fromPlayer?.WorldData?.CurrentGameMode != EnumGameMode.Creative)
             {
-                fromPlayer?.SendIngameError("picorecipes-notcreative", Lang.Get("picorecipes:cheat-not-creative"));
+                fromPlayer?.SendIngameError("picorecipes-notcreative", Loc.T("cheat-not-creative", "You must be in creative mode to spawn items."));
                 return;
             }
             if (msg?.StackBytes == null) return;
@@ -101,15 +101,15 @@ namespace PicoRecipes
             ItemListDialog = new GuiDialogItemList(api, this);
             api.Gui.RegisterDialog(BrowserDialog, HoverDialog, ItemListDialog);
 
-            api.Input.RegisterHotKey(HotkeyToggle, Lang.Get("picorecipes:hotkey-toggle"),
+            api.Input.RegisterHotKey(HotkeyToggle, Loc.T("hotkey-toggle", "Pico Recipes: Enable/disable overlay"),
                 GlKeys.O, HotkeyType.GUIOrOtherControls, ctrlPressed: true);
             api.Input.SetHotKeyHandler(HotkeyToggle, OnToggleHotkey);
 
-            api.Input.RegisterHotKey(HotkeyRecipes, Lang.Get("picorecipes:hotkey-show-recipes"),
+            api.Input.RegisterHotKey(HotkeyRecipes, Loc.T("hotkey-show-recipes", "Pico Recipes: Show recipes for hovered item"),
                 GlKeys.R, HotkeyType.GUIOrOtherControls);
             api.Input.SetHotKeyHandler(HotkeyRecipes, _ => ShowForHoveredStack(usages: false));
 
-            api.Input.RegisterHotKey(HotkeyUsages, Lang.Get("picorecipes:hotkey-show-usages"),
+            api.Input.RegisterHotKey(HotkeyUsages, Loc.T("hotkey-show-usages", "Pico Recipes: Show usages of hovered item"),
                 GlKeys.U, HotkeyType.GUIOrOtherControls);
             api.Input.SetHotKeyHandler(HotkeyUsages, _ => ShowForHoveredStack(usages: true));
 
@@ -129,7 +129,9 @@ namespace PicoRecipes
                 RestoreMinimap();
             }
 
-            capi.ShowChatMessage(Lang.Get(Enabled ? "picorecipes:enabled-msg" : "picorecipes:disabled-msg"));
+            capi.ShowChatMessage(Enabled
+                ? Loc.T("enabled-msg", "Pico Recipes overlay enabled")
+                : Loc.T("disabled-msg", "Pico Recipes overlay disabled"));
             return true;
         }
 
@@ -250,13 +252,13 @@ namespace PicoRecipes
 
             if (capi.World.Player.WorldData.CurrentGameMode != EnumGameMode.Creative)
             {
-                capi.TriggerIngameError(this, "picorecipes-notcreative", Lang.Get("picorecipes:cheat-not-creative"));
+                capi.TriggerIngameError(this, "picorecipes-notcreative", Loc.T("cheat-not-creative", "You must be in creative mode to spawn items."));
                 return;
             }
 
             if (clientChannel == null || !clientChannel.Connected)
             {
-                capi.TriggerIngameError(this, "picorecipes-noserver", Lang.Get("picorecipes:cheat-no-server"));
+                capi.TriggerIngameError(this, "picorecipes-noserver", Loc.T("cheat-no-server", "Item spawning unavailable: Pico Recipes is not installed on the server."));
                 return;
             }
 

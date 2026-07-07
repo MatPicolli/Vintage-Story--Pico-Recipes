@@ -57,6 +57,9 @@ namespace PicoRecipes
             mod.RecipeIndex.EnsureLoaded();
             if (inv == null) inv = new DummyInventory(capi, SlotsPerPage);
 
+            // Reset the search each time the overlay opens, but keep the page you were on.
+            searchText = "";
+
             ApplyFilter();
             ComposeDialog();
         }
@@ -106,7 +109,7 @@ namespace PicoRecipes
                     .AddDynamicText("", CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center), pageLabelBounds, "pagelabel")
                     .AddInteractiveElement(gridElem, "slotgrid")
                 .EndChildElements()
-                .Compose();
+                .Compose(false);
 
             // ----- Bottom-center search box -----
             ElementBounds searchBounds = ElementBounds.Fixed(0, 0, 320, 30);
@@ -126,11 +129,13 @@ namespace PicoRecipes
                 .BeginChildElements(searchPanelBg)
                     .AddTextInput(searchBounds, OnSearchTextChanged, CairoFont.WhiteSmallishText(), "searchbox")
                 .EndChildElements()
-                .Compose();
+                .Compose(false);
 
             var searchbox = Composers[SearchKey].GetTextInput("searchbox");
-            searchbox.SetPlaceHolderText(Lang.Get("picorecipes:search-placeholder"));
+            searchbox.SetPlaceHolderText(Loc.T("search-placeholder", "Search... (@mod filters by mod)"));
             searchbox.SetValue(searchText, false);
+            // Do not steal keyboard focus on open: the search box only accepts typing once clicked.
+            Composers[SearchKey].UnfocusOwnElements();
 
             FillPage();
         }

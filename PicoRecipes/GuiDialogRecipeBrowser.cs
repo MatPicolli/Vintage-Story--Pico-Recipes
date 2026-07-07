@@ -110,8 +110,8 @@ namespace PicoRecipes
                 .WithFixedPosition(0, 70);
 
             GuiTab[] tabs = {
-                new GuiTab { Name = Lang.Get("picorecipes:tab-recipes"), DataInt = 0 },
-                new GuiTab { Name = Lang.Get("picorecipes:tab-usages"), DataInt = 1 }
+                new GuiTab { Name = Loc.T("tab-recipes", "Recipes"), DataInt = 0 },
+                new GuiTab { Name = Loc.T("tab-usages", "Usages"), DataInt = 1 }
             };
 
             RichTextComponentBase[] components = builder.BuildFull(current.Stack, current.Usages);
@@ -120,7 +120,7 @@ namespace PicoRecipes
             SingleComposer = capi.Gui
                 .CreateCompo("picorecipes-browser", dialogBounds)
                 .AddShadedDialogBG(bgBounds, true)
-                .AddDialogTitleBar(Lang.Get("picorecipes:dialog-title"), () => TryClose())
+                .AddDialogTitleBar(Loc.T("dialog-title", "Pico Recipes"), () => TryClose())
                 .BeginChildElements(bgBounds)
                     .AddHorizontalTabs(tabs, tabBounds, OnTabClicked, CairoFont.WhiteSmallText(), CairoFont.WhiteSmallText().WithColor(GuiStyle.ActiveButtonTextColor), "tabs")
                     .BeginClip(clipBounds)

@@ -77,8 +77,13 @@ workflow in this repo does all of the above automatically and uploads the zip as
   tabs, composed from the same text components the vanilla handbook uses (`RecipeComponentBuilder`,
   shared with the hover preview). It draws above the inventory so it is never hidden behind it.
 - **Hover preview** (`GuiDialogRecipeHover`): a passive HUD popup that renders a compact recipe for
-  the item under the cursor after a short dwell. It skips the expensive process scan so hovering
-  stays smooth.
+  the item under the cursor after a short dwell, drawn on top of everything. It sizes itself to the
+  content with a single composer (measure, then `ReCompose`), and skips the expensive process scan
+  so hovering stays smooth.
+- **Voxel recipes**: clay forming, knapping and smithing are shape-based rather than grid-based, so
+  their `Pattern` is rendered as a top-down `#`/`.` silhouette next to the input → output line.
+- **Localization** (`Loc`): all UI strings have a built-in English fallback, so the interface stays
+  readable even if the mod's lang file fails to load.
 - **Minimap handling**: while the overlay is up, the vanilla minimap HUD is located at runtime by
   type name and closed, then reopened afterwards (best effort — no dependency on the map mod).
 - **Recipe index** (`RecipeIndex`): grid recipes come straight from `IWorldAccessor.GridRecipes`.
