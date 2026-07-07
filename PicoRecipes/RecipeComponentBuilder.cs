@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Cairo;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -217,7 +216,7 @@ namespace PicoRecipes
 
         /// <summary>
         /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render a
-        /// top-down silhouette of the shape (■ = filled voxel) so the "recipe" is actually explained.
+        /// top-down silhouette of the shape as a small pixel grid so the "recipe" is actually shown.
         /// </summary>
         void TryAddVoxelPattern(List<RichTextComponentBase> components, RecipeBase recipe)
         {
@@ -230,32 +229,35 @@ namespace PicoRecipes
                 int rows = pattern[0]?.Length ?? 0;
                 if (rows == 0) return;
 
-                var sb = new StringBuilder();
+                // Columns = widest row across all layers.
+                int cols = 0;
+                foreach (string[] layer in pattern)
+                    foreach (string row in layer)
+                        if (row != null && row.Length > cols) cols = row.Length;
+                if (cols == 0) return;
+
+                // Merge all layers into a top-down filled/empty footprint.
+                var merged = new bool[rows, cols];
                 for (int j = 0; j < rows; j++)
                 {
-                    for (int z = 0; ; z++)
+                    for (int z = 0; z < cols; z++)
                     {
-                        bool anyRowHasCol = false;
                         bool filled = false;
                         for (int layer = 0; layer < pattern.Length; layer++)
                         {
                             if (j >= pattern[layer].Length) continue;
                             string row = pattern[layer][j];
                             if (row == null || z >= row.Length) continue;
-                            anyRowHasCol = true;
-                            char c = row[z];
-                            if (c != '_' && c != ' ') filled = true;
+                            char ch = row[z];
+                            if (ch != '_' && ch != ' ') { filled = true; break; }
                         }
-                        if (!anyRowHasCol) break;
-                        sb.Append(filled ? '#' : '.'); // filled voxel vs empty
+                        merged[j, z] = filled;
                     }
-                    sb.Append('\n');
                 }
 
-                if (sb.Length == 0) return;
-
-                components.Add(new RichTextComponent(capi, sb.ToString(),
-                    CairoFont.WhiteDetailText().WithFont("monospace").WithColor(GuiStyle.ColorParchment)));
+                components.Add(new ClearFloatTextComponent(capi, 4));
+                components.Add(new VoxelPatternComponent(capi, merged) { PaddingLeft = 6 });
+                components.Add(new ClearFloatTextComponent(capi, 4));
             }
             catch (Exception) { }
         }

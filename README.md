@@ -82,7 +82,8 @@ workflow in this repo does all of the above automatically and uploads the zip as
   and its scrollbar. It sizes itself to the content with a single composer (measure, then
   `ReCompose`), and skips the expensive process scan so hovering stays smooth.
 - **Voxel recipes**: clay forming, knapping and smithing are shape-based rather than grid-based, so
-  their `Pattern` is rendered as a top-down `#`/`.` silhouette next to the input → output line.
+  their `Pattern` is rendered as a small pixel grid (`VoxelPatternComponent`, a custom drawn
+  richtext component) next to the input → output line.
 - **Localization** (`Loc`): all UI strings have a built-in English fallback, so the interface stays
   readable even if the mod's lang file fails to load.
 - **Minimap handling**: while the overlay is up, the vanilla minimap HUD is located at runtime by
