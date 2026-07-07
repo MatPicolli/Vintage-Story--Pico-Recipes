@@ -76,10 +76,11 @@ workflow in this repo does all of the above automatically and uploads the zip as
 - **Recipe browser** (`GuiDialogRecipeBrowser`): a scrollable richtext page with Recipes/Usages
   tabs, composed from the same text components the vanilla handbook uses (`RecipeComponentBuilder`,
   shared with the hover preview). It draws above the inventory so it is never hidden behind it.
-- **Hover preview** (`GuiDialogRecipeHover`): a passive HUD popup that renders a compact recipe for
-  the item under the cursor after a short dwell, drawn on top of everything. It sizes itself to the
-  content with a single composer (measure, then `ReCompose`), and skips the expensive process scan
-  so hovering stays smooth.
+- **Hover preview** (`GuiDialogRecipeHover`): a passive popup that renders a compact recipe for the
+  item under the cursor after a short dwell. It is a regular dialog with a high `DrawOrder` (0.5),
+  not a HUD element — HUD elements render in an earlier pass and would end up under the inventory
+  and its scrollbar. It sizes itself to the content with a single composer (measure, then
+  `ReCompose`), and skips the expensive process scan so hovering stays smooth.
 - **Voxel recipes**: clay forming, knapping and smithing are shape-based rather than grid-based, so
   their `Pattern` is rendered as a top-down `#`/`.` silhouette next to the input → output line.
 - **Localization** (`Loc`): all UI strings have a built-in English fallback, so the interface stays
