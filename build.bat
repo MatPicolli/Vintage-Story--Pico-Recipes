@@ -20,7 +20,7 @@ set "MODID=picorecipes"
 set "CONFIG=Release"
 set "PROJECT=PicoRecipes\PicoRecipes.csproj"
 set "MODINFO=PicoRecipes\modinfo.json"
-set "OUTDIR=PicoRecipes\bin\%CONFIG%\Mods\%MODID%"
+set "MODSROOT=PicoRecipes\bin\%CONFIG%\Mods"
 set "RELEASEDIR=Releases"
 
 REM ---- Read the current version from modinfo.json (used as the default) ----
@@ -58,11 +58,25 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "%OUTDIR%\%MODID%.dll" (
+REM ---- Locate the freshly built mod DLL wherever it landed (case-insensitive) ----
+REM The assembly is PicoRecipes.dll while the modid is lowercase, and the output
+REM folder case can vary, so we just find the .dll under the Mods output folder
+REM instead of assuming an exact path.
+set "DLL="
+for /f "delims=" %%f in ('dir /b /s "%MODSROOT%\*.dll" 2^>nul') do set "DLL=%%f"
+
+if not defined DLL (
     echo.
-    echo [ERROR] Build reported success but %OUTDIR%\%MODID%.dll is missing.
+    echo [ERROR] Build reported success but no mod .dll was found under
+    echo         %MODSROOT%\
     exit /b 1
 )
+
+REM The mod folder to zip is the directory that contains the DLL.
+for %%f in ("%DLL%") do set "OUTDIR=%%~dpf"
+if "%OUTDIR:~-1%"=="\" set "OUTDIR=%OUTDIR:~0,-1%"
+
+echo Built: %DLL%
 
 REM ---- Package the built mod folder into a zip ----
 if not exist "%RELEASEDIR%" mkdir "%RELEASEDIR%"
