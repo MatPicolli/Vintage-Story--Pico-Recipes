@@ -149,8 +149,9 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// JEI behavior: the item list shows up automatically whenever an inventory-like dialog is
-        /// on screen (when the mod is enabled), and goes away when they are all closed.
+        /// JEI behavior: the item list shows up automatically while the player inventory screen is
+        /// open by itself (when the mod is enabled), and goes away when it closes or when any other
+        /// container (chest, crate, ...) is open.
         /// </summary>
         void OnClientTick(float dt)
         {
@@ -160,8 +161,12 @@ namespace PicoRecipes
             // is done (or nearly) by the time the overlay is first opened. Idempotent.
             RecipeIndex.EnsureLoaded();
 
-            bool inventoryOpen = capi.Gui.OpenedGuis.Any(IsInventoryLikeDialog);
-            bool shouldShow = Enabled && inventoryOpen;
+            // The overlay is only for the plain player inventory: it appears when the inventory
+            // screen is open on its own, and never when a chest, crate or any other container is
+            // open (even if that container also shows the backpack).
+            bool playerInventoryOpen = capi.Gui.OpenedGuis.Any(IsPlayerInventoryDialog);
+            bool containerOpen = capi.Gui.OpenedGuis.Any(IsExternalContainerDialog);
+            bool shouldShow = Enabled && playerInventoryOpen && !containerOpen;
 
             if (shouldShow && !ItemListDialog.IsOpened())
             {
@@ -172,9 +177,9 @@ namespace PicoRecipes
                 ItemListDialog.TryClose();
             }
 
-            // The recipe browser is always opened from an inventory context, so close it together
-            // with the inventory (it does not otherwise get closed when you press E).
-            if (!inventoryOpen && BrowserDialog.IsOpened())
+            // The recipe browser is always opened from the overlay, so close it whenever the overlay
+            // should no longer be shown (inventory closed, or a container was opened).
+            if (!shouldShow && BrowserDialog.IsOpened())
             {
                 BrowserDialog.TryClose();
             }
@@ -190,14 +195,35 @@ namespace PicoRecipes
             else HoverDialog.Hide();
         }
 
-        bool IsInventoryLikeDialog(object dlg)
+        /// <summary>
+        /// True only for the player's own inventory / character screen (the dialogs opened with the
+        /// inventory key, e.g. GuiDialogInventory / GuiDialogCreativeInventory / GuiDialogCharacter).
+        /// These are the only dialogs that should bring up the overlay. Block-entity containers
+        /// (chests, crates, campfires, ...) are excluded first, since their dialog class name also
+        /// contains "Inventory" (e.g. GuiDialogBlockEntityInventory) and would otherwise match.
+        /// </summary>
+        bool IsPlayerInventoryDialog(object dlg)
         {
             if (dlg is not GuiDialog dialog) return false;
+            if (dialog is GuiDialogBlockEntity) return false;
             if (dialog == ItemListDialog || dialog == BrowserDialog || dialog == HoverDialog) return false;
-            if (dialog is GuiDialogBlockEntity) return true;
 
             string name = dialog.GetType().Name;
             return name.Contains("Inventory") || name.Contains("Character");
+        }
+
+        /// <summary>
+        /// True for any external container dialog (chests, crates, querns, campfires, ground storage,
+        /// etc.). While one of these is open the overlay stays hidden, so it never opens on top of a
+        /// container. Our own dialogs and the player inventory are not containers.
+        /// </summary>
+        bool IsExternalContainerDialog(object dlg)
+        {
+            if (dlg is not GuiDialog dialog) return false;
+            if (dialog == ItemListDialog || dialog == BrowserDialog || dialog == HoverDialog) return false;
+            if (IsPlayerInventoryDialog(dialog)) return false;
+
+            return dialog is GuiDialogBlockEntity;
         }
 
         public void OnItemListClosedByUser()

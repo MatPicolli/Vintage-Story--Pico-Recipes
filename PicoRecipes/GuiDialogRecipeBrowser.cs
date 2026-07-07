@@ -87,10 +87,14 @@ namespace PicoRecipes
             const double tabH = 30;
             double contentTop = titleH + 6 + tabH + 10;  // title, gap, tabs, gap
 
-            // The title bar gets its own explicit bounds so it takes part in the layout; the tabs
-            // then sit clearly below it (previously they were placed in the title-bar row and
-            // overlapped the "Pico Recipes" title).
-            ElementBounds titleBarBounds = ElementBounds.Fixed(0, 0, ViewWidth + 34, titleH);
+            // The title bar is added below WITHOUT explicit bounds so it parents to the dialog root
+            // (dialogBounds), exactly like every vanilla dialog. This is important: the built-in
+            // "Movable" title-bar option repositions the title bar's ParentBounds. If that parent is
+            // the Fill + FitToChildren background bounds, toggling movable collapses its width (the
+            // tabs vanish) and the next compose crashes in GuiElementDialogTitleBar.BlurPartial with
+            // "x2 must be larger than x1". Parenting to the dialog root moves the whole dialog safely.
+            // The tabs still sit below the title bar: the top TitleBarHeight band is left empty here,
+            // and FitToChildren measures from the top edge so the background still spans it.
             ElementBounds tabBounds = ElementBounds.Fixed(0, titleH + 6, ViewWidth + 34, tabH);
 
             ElementBounds textBounds = ElementBounds.Fixed(9, contentTop, ViewWidth, ViewHeight);
@@ -113,7 +117,7 @@ namespace PicoRecipes
 
             ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding / 2);
             bgBounds.BothSizing = ElementSizing.FitToChildren;
-            bgBounds.WithChildren(titleBarBounds, tabBounds, insetBounds, textBounds, scrollbarBounds, backButtonBounds, closeButtonBounds);
+            bgBounds.WithChildren(tabBounds, insetBounds, textBounds, scrollbarBounds, backButtonBounds, closeButtonBounds);
 
             ElementBounds dialogBounds = bgBounds.ForkBoundingParent()
                 .WithAlignment(EnumDialogArea.CenterFixed)
@@ -131,7 +135,7 @@ namespace PicoRecipes
             SingleComposer = capi.Gui
                 .CreateCompo("picorecipes-browser", dialogBounds)
                 .AddShadedDialogBG(bgBounds, true)
-                .AddDialogTitleBar(Loc.T("dialog-title", "Pico Recipes"), () => TryClose(), bounds: titleBarBounds)
+                .AddDialogTitleBar(Loc.T("dialog-title", "Pico Recipes"), () => TryClose())
                 .BeginChildElements(bgBounds)
                     .AddHorizontalTabs(tabs, tabBounds, OnTabClicked, tabFont, tabFont.Clone().WithColor(GuiStyle.ActiveButtonTextColor), "tabs")
                     .BeginClip(clipBounds)
