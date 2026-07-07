@@ -14,6 +14,7 @@ namespace PicoRecipes
 
         public SlotClickedDelegate OnSlotClicked;
         public System.Action<int> OnScrollPage;
+        public System.Action<int> OnShiftScroll;
 
         readonly IInventory inv;
 
@@ -66,7 +67,16 @@ namespace PicoRecipes
         {
             if (!Bounds.PointInside(api.Input.MouseX, api.Input.MouseY)) return;
 
-            OnScrollPage?.Invoke(args.delta > 0 ? -1 : 1);
+            bool shift = api.Input.KeyboardKeyState[(int)GlKeys.ShiftLeft] || api.Input.KeyboardKeyState[(int)GlKeys.ShiftRight];
+            if (shift)
+            {
+                // Shift+wheel swaps between the different recipes shown in the hover preview.
+                OnShiftScroll?.Invoke(args.delta > 0 ? -1 : 1);
+            }
+            else
+            {
+                OnScrollPage?.Invoke(args.delta > 0 ? -1 : 1);
+            }
             args.SetHandled(true);
         }
 

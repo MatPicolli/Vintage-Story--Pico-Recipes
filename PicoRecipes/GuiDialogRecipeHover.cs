@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Cairo;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -8,8 +10,9 @@ namespace PicoRecipes
 {
     /// <summary>
     /// A small popup that appears next to the item you are hovering in the item list and shows its
-    /// recipe at a glance — no click required. Left/right click and the R/U hotkeys still open the
-    /// full browser.
+    /// recipe at a glance — no click required. When the item has several ways to be crafted it shows
+    /// one at a time; Shift+MouseWheel cycles between them (variants inside one recipe auto-cycle on
+    /// their own). Left/right click and the R/U hotkeys still open the full browser.
     ///
     /// This is a regular dialog (not a HUD element) on purpose: HUD elements render in an earlier
     /// pass than dialogs, so a HUD popup ends up underneath the inventory and its scrollbar no
@@ -23,6 +26,9 @@ namespace PicoRecipes
         readonly RecipeComponentBuilder builder;
 
         ItemStack currentStack;
+        List<RichTextComponentBase[]> pages = new List<RichTextComponentBase[]>();
+        int pageIndex;
+        double lastAnchorX, lastAnchorY;
 
         const int Width = 360;
         const int MaxHeight = 340;
@@ -66,9 +72,23 @@ namespace PicoRecipes
             if (sameStack && IsOpened()) return;
 
             currentStack = stack.Clone();
-            Compose(anchorScreenX, anchorScreenY);
+            lastAnchorX = anchorScreenX;
+            lastAnchorY = anchorScreenY;
 
+            mod.RecipeIndex.EnsureLoaded();
+            pages = builder.BuildCreatedByPages(currentStack);
+            pageIndex = 0;
+
+            Compose();
             if (!IsOpened()) TryOpen();
+        }
+
+        /// <summary>Cycle to another crafting recipe for the current item (Shift+MouseWheel).</summary>
+        public void CycleRecipe(int dir)
+        {
+            if (!IsOpened() || pages.Count < 2) return;
+            pageIndex = GameMath.Mod(pageIndex + dir, pages.Count);
+            Compose();
         }
 
         public void Hide()
@@ -77,12 +97,36 @@ namespace PicoRecipes
             if (IsOpened()) TryClose();
         }
 
-        void Compose(double anchorScreenX, double anchorScreenY)
+        void Compose()
         {
-            mod.RecipeIndex.EnsureLoaded();
+            var components = new List<RichTextComponentBase>();
 
-            RichTextComponentBase[] components = builder.BuildCompact(currentStack, out _);
+            // Header: item icon + name
+            components.Add(new ItemstackTextComponent(capi, currentStack, 30, 8, EnumFloat.Left, OnStackClicked));
+            components.Add(new RichTextComponent(capi, currentStack.GetName() + "\n", CairoFont.WhiteSmallishText().WithWeight(FontWeight.Bold)));
 
+            if (pages.Count == 0)
+            {
+                components.Add(new ClearFloatTextComponent(capi, 4));
+                components.Add(new RichTextComponent(capi, Loc.T("no-crafting-recipe", "No crafting recipe."), CairoFont.WhiteDetailText()));
+            }
+            else
+            {
+                if (pages.Count > 1)
+                {
+                    components.Add(new RichTextComponent(capi,
+                        Loc.T("recipe-page-hint", "◄ Recipe {0}/{1} ►  (Shift+Scroll)", pageIndex + 1, pages.Count) + "\n",
+                        CairoFont.WhiteDetailText().WithColor(GuiStyle.ColorParchment)));
+                }
+                components.Add(new ClearFloatTextComponent(capi, 2));
+                components.AddRange(pages[pageIndex]);
+            }
+
+            ComposeAndPlace(components.ToArray());
+        }
+
+        void ComposeAndPlace(RichTextComponentBase[] components)
+        {
             double contentWidth = Width - 2 * Pad;
             int maxInner = MaxHeight - 2 * Pad;
             int minInner = MinHeight - 2 * Pad;
@@ -114,8 +158,8 @@ namespace PicoRecipes
             double totalH = innerH + 2 * Pad;
 
             float scale = Math.Max(0.1f, RuntimeEnv.GUIScale);
-            double ax = anchorScreenX / scale;
-            double ay = anchorScreenY / scale;
+            double ax = lastAnchorX / scale;
+            double ay = lastAnchorY / scale;
             double screenW = capi.Render.FrameWidth / scale;
             double screenH = capi.Render.FrameHeight / scale;
 

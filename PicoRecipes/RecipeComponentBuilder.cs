@@ -9,8 +9,8 @@ namespace PicoRecipes
 {
     /// <summary>
     /// Turns the recipes found for an itemstack into the richtext components used by both the
-    /// full recipe browser and the compact hover preview. Rendering uses the same engine
-    /// components the vanilla handbook uses, so wildcard / wood-typed recipes cycle correctly.
+    /// full recipe browser and the hover popup. Rendering uses the same engine components the
+    /// vanilla handbook uses, so wildcard / wood-typed recipes cycle correctly.
     /// </summary>
     public class RecipeComponentBuilder
     {
@@ -51,42 +51,43 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// Compact preview for the hover popup: recipe first, minimal chrome. Prefers "how to craft"
-        /// (created-by); falls back to "used in" if the item is only a raw ingredient.
+        /// One self-contained page per created-by recipe, for the swappable hover popup. Each page
+        /// is a heading + a single recipe (grid, voxel or barrel). Variants inside a page still
+        /// auto-cycle on their own. Never includes usages.
         /// </summary>
-        public RichTextComponentBase[] BuildCompact(ItemStack stack, out int rowEstimate)
+        public List<RichTextComponentBase[]> BuildCreatedByPages(ItemStack stack)
         {
-            var components = new List<RichTextComponentBase>();
+            var pages = new List<RichTextComponentBase[]>();
 
-            // Small header just to identify the item, then straight to the recipe.
-            components.Add(new ItemstackTextComponent(capi, stack, 30, 8, EnumFloat.Left, onStackClicked));
-            components.Add(new RichTextComponent(capi, stack.GetName() + "\n", CairoFont.WhiteSmallishText().WithWeight(FontWeight.Bold)));
-            components.Add(new ClearFloatTextComponent(capi, 4));
-
-            // The preview only ever shows how to MAKE the item (created-by), never its usages.
             // Skip the expensive process scan; grid/voxel/barrel recipes are indexed.
-            RecipeSections sections = index.GetCreatedBy(stack, includeProcesses: false);
+            RecipeSections s = index.GetCreatedBy(stack, includeProcesses: false);
+            ItemStack[] all = index.AllStacks.ToArray();
 
-            if (sections.IsEmpty)
-            {
-                rowEstimate = 1;
-                components.Add(new RichTextComponent(capi, Loc.T("no-crafting-recipe", "No crafting recipe."), CairoFont.WhiteDetailText()));
-                return components.ToArray();
-            }
+            foreach (GridRecipe[] group in s.GridGroups) pages.Add(BuildGridPage(group, stack, all));
+            foreach (RecipeBase r in s.Smithing) pages.Add(BuildBaseRecipePage(r, Loc.T("heading-smithing", "Smithing"), barrel: false));
+            foreach (RecipeBase r in s.ClayForming) pages.Add(BuildBaseRecipePage(r, Loc.T("heading-clayforming", "Clay forming"), barrel: false));
+            foreach (RecipeBase r in s.Knapping) pages.Add(BuildBaseRecipePage(r, Loc.T("heading-knapping", "Knapping"), barrel: false));
+            foreach (RecipeBase r in s.Barrel) pages.Add(BuildBaseRecipePage(r, Loc.T("heading-barrel", "Barrel (mixing / aging)"), barrel: true));
 
-            AddAllSections(components, sections, stack, maxGridGroups: 4);
-            rowEstimate = EstimateRows(sections, 4);
-            return components.ToArray();
+            return pages;
         }
 
-        /// <summary>Rough number of recipe "rows" so the hover popup can size itself before layout.</summary>
-        static int EstimateRows(RecipeSections s, int maxGridGroups)
+        RichTextComponentBase[] BuildGridPage(GridRecipe[] group, ItemStack fallbackOutput, ItemStack[] allStacks)
         {
-            int rows = 2; // header
-            rows += (Math.Min(s.GridGroups.Count, maxGridGroups) + 1) / 2 * 2; // grids drawn two per row, ~2 lines tall
-            rows += s.Smithing.Count + s.ClayForming.Count + s.Knapping.Count + s.Barrel.Count;
-            rows += s.Smelting.Count + s.Grinding.Count + s.Crushing.Count;
-            return rows;
+            var c = new List<RichTextComponentBase>();
+            AddHeading(c, Loc.T("heading-crafting", "Crafting"));
+            c.Add(new ClearFloatTextComponent(capi, 8));
+            AppendGridGroup(c, group, fallbackOutput, allStacks, padLeft: 6);
+            return c.ToArray();
+        }
+
+        RichTextComponentBase[] BuildBaseRecipePage(RecipeBase recipe, string heading, bool barrel)
+        {
+            var c = new List<RichTextComponentBase>();
+            AddHeading(c, heading);
+            AddIngredientsToOutputLine(c, recipe, barrel ? GetSealInfo(recipe) : null);
+            AddVoxelPatterns(c, recipe);
+            return c.ToArray();
         }
 
         void AddAllSections(List<RichTextComponentBase> components, RecipeSections sections, ItemStack fallbackOutput, int maxGridGroups)
@@ -124,43 +125,9 @@ namespace PicoRecipes
             {
                 if (group.Length == 0) continue;
 
-                if (i++ % 2 == 0) components.Add(new ClearFloatTextComponent(capi, 8));
-
-                SlideshowGridRecipeTextComponent gridComp;
-                try
-                {
-                    gridComp = new SlideshowGridRecipeTextComponent(capi, group, 40, EnumFloat.Inline, onStackClicked, allStacks);
-                }
-                catch (Exception e)
-                {
-                    // A broken recipe from some mod should not take down the whole page
-                    capi.Logger.Warning("[picorecipes] Could not display recipe group {0}: {1}", group[0]?.Name, e.Message);
-                    continue;
-                }
-                gridComp.VerticalAlign = EnumVerticalAlign.Top;
-                gridComp.PaddingRight = 8;
-                gridComp.PaddingLeft = 6 + (1 - i % 2) * 20;
-                components.Add(gridComp);
-
-                components.Add(new RichTextComponent(capi, "=", CairoFont.WhiteMediumText())
-                {
-                    VerticalAlign = EnumVerticalAlign.Middle,
-                    PaddingRight = 5
-                });
-
-                ItemStack[] outputStacks = group
-                    .Select(r => { try { return r.Output?.ResolvedItemStack; } catch (Exception) { return null; } })
-                    .Where(s => s != null)
-                    .ToArray();
-                if (outputStacks.Length == 0) outputStacks = new[] { fallbackOutput };
-
-                var outComp = new SlideshowItemstackTextComponent(capi, outputStacks, 40, EnumFloat.Inline, onStackClicked)
-                {
-                    VerticalAlign = EnumVerticalAlign.Middle,
-                    ShowStackSize = true
-                };
-                outComp.overrideCurrentItemStack = gridComp.GenerateCurrentVisibleOutputStack;
-                components.Add(outComp);
+                if (i % 2 == 0) components.Add(new ClearFloatTextComponent(capi, 8));
+                AppendGridGroup(components, group, fallbackOutput, allStacks, padLeft: 6 + (1 - i % 2) * 20);
+                i++;
             }
 
             components.Add(new ClearFloatTextComponent(capi, 8));
@@ -173,6 +140,48 @@ namespace PicoRecipes
             }
         }
 
+        /// <summary>Appends one grid recipe as: [grid] = [output]. Returns false if it could not be built.</summary>
+        void AppendGridGroup(List<RichTextComponentBase> components, GridRecipe[] group, ItemStack fallbackOutput, ItemStack[] allStacks, double padLeft)
+        {
+            if (group.Length == 0) return;
+
+            SlideshowGridRecipeTextComponent gridComp;
+            try
+            {
+                gridComp = new SlideshowGridRecipeTextComponent(capi, group, 40, EnumFloat.Inline, onStackClicked, allStacks);
+            }
+            catch (Exception e)
+            {
+                // A broken recipe from some mod should not take down the whole page
+                capi.Logger.Warning("[picorecipes] Could not display recipe group {0}: {1}", group[0]?.Name, e.Message);
+                return;
+            }
+            gridComp.VerticalAlign = EnumVerticalAlign.Top;
+            gridComp.PaddingRight = 8;
+            gridComp.PaddingLeft = padLeft;
+            components.Add(gridComp);
+
+            components.Add(new RichTextComponent(capi, "=", CairoFont.WhiteMediumText())
+            {
+                VerticalAlign = EnumVerticalAlign.Middle,
+                PaddingRight = 5
+            });
+
+            ItemStack[] outputStacks = group
+                .Select(r => { try { return r.Output?.ResolvedItemStack; } catch (Exception) { return null; } })
+                .Where(st => st != null)
+                .ToArray();
+            if (outputStacks.Length == 0) outputStacks = new[] { fallbackOutput };
+
+            var outComp = new SlideshowItemstackTextComponent(capi, outputStacks, 40, EnumFloat.Inline, onStackClicked)
+            {
+                VerticalAlign = EnumVerticalAlign.Middle,
+                ShowStackSize = true
+            };
+            outComp.overrideCurrentItemStack = gridComp.GenerateCurrentVisibleOutputStack;
+            components.Add(outComp);
+        }
+
         void AddRecipeBaseSection(List<RichTextComponentBase> components, List<RecipeBase> recipes, string heading)
         {
             if (recipes.Count == 0) return;
@@ -182,7 +191,7 @@ namespace PicoRecipes
             foreach (RecipeBase recipe in recipes)
             {
                 AddIngredientsToOutputLine(components, recipe, extraInfo: null);
-                TryAddVoxelPattern(components, recipe);
+                AddVoxelPatterns(components, recipe);
             }
 
             components.Add(new ClearFloatTextComponent(capi, 4));
@@ -196,29 +205,32 @@ namespace PicoRecipes
 
             foreach (RecipeBase recipe in recipes)
             {
-                string extraInfo = null;
-                try
-                {
-                    // BarrelRecipe.SealHours; read reflectively to avoid a VSSurvivalMod.dll reference
-                    var prop = recipe.GetType().GetProperty("SealHours");
-                    if (prop?.GetValue(recipe) is double hours && hours > 0)
-                    {
-                        extraInfo = Loc.T("seal-for-hours", "Seal for {0} in-game hours", Math.Round(hours, 1));
-                    }
-                }
-                catch (Exception) { }
-
-                AddIngredientsToOutputLine(components, recipe, extraInfo);
+                AddIngredientsToOutputLine(components, recipe, GetSealInfo(recipe));
             }
 
             components.Add(new ClearFloatTextComponent(capi, 4));
         }
 
+        string GetSealInfo(RecipeBase recipe)
+        {
+            try
+            {
+                // BarrelRecipe.SealHours; read reflectively to avoid a VSSurvivalMod.dll reference
+                var prop = recipe.GetType().GetProperty("SealHours");
+                if (prop?.GetValue(recipe) is double hours && hours > 0)
+                {
+                    return Loc.T("seal-for-hours", "Seal for {0} in-game hours", Math.Round(hours, 1));
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
         /// <summary>
-        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render a
-        /// top-down silhouette of the shape as a small pixel grid so the "recipe" is actually shown.
+        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render each
+        /// layer as its own small pixel grid so multi-layer recipes (clay, smithing) read as steps.
         /// </summary>
-        void TryAddVoxelPattern(List<RichTextComponentBase> components, RecipeBase recipe)
+        void AddVoxelPatterns(List<RichTextComponentBase> components, RecipeBase recipe)
         {
             try
             {
@@ -226,40 +238,56 @@ namespace PicoRecipes
                 var patternField = recipe.GetType().GetField("Pattern");
                 if (patternField?.GetValue(recipe) is not string[][] pattern || pattern.Length == 0) return;
 
-                int rows = pattern[0]?.Length ?? 0;
-                if (rows == 0) return;
+                int rows = 0;
+                foreach (string[] layer in pattern)
+                    if (layer != null && layer.Length > rows) rows = layer.Length;
 
-                // Columns = widest row across all layers.
                 int cols = 0;
                 foreach (string[] layer in pattern)
-                    foreach (string row in layer)
-                        if (row != null && row.Length > cols) cols = row.Length;
-                if (cols == 0) return;
+                    if (layer != null)
+                        foreach (string row in layer)
+                            if (row != null && row.Length > cols) cols = row.Length;
 
-                // Merge all layers into a top-down filled/empty footprint.
-                var merged = new bool[rows, cols];
-                for (int j = 0; j < rows; j++)
+                if (rows == 0 || cols == 0) return;
+
+                components.Add(new ClearFloatTextComponent(capi, 4));
+
+                bool multi = pattern.Length > 1;
+                for (int layer = 0; layer < pattern.Length; layer++)
                 {
-                    for (int z = 0; z < cols; z++)
+                    if (multi && layer > 0)
                     {
-                        bool filled = false;
-                        for (int layer = 0; layer < pattern.Length; layer++)
+                        components.Add(new RichTextComponent(capi, "→", CairoFont.WhiteMediumText())
                         {
-                            if (j >= pattern[layer].Length) continue;
-                            string row = pattern[layer][j];
-                            if (row == null || z >= row.Length) continue;
-                            char ch = row[z];
-                            if (ch != '_' && ch != ' ') { filled = true; break; }
-                        }
-                        merged[j, z] = filled;
+                            VerticalAlign = EnumVerticalAlign.Middle,
+                            PaddingLeft = 4,
+                            PaddingRight = 4
+                        });
                     }
+
+                    components.Add(new VoxelPatternComponent(capi, LayerToGrid(pattern[layer], rows, cols)) { PaddingLeft = 6 });
                 }
 
                 components.Add(new ClearFloatTextComponent(capi, 4));
-                components.Add(new VoxelPatternComponent(capi, merged) { PaddingLeft = 6 });
-                components.Add(new ClearFloatTextComponent(capi, 4));
             }
             catch (Exception) { }
+        }
+
+        static bool[,] LayerToGrid(string[] layer, int rows, int cols)
+        {
+            var g = new bool[rows, cols];
+            if (layer == null) return g;
+            for (int j = 0; j < rows && j < layer.Length; j++)
+            {
+                string row = layer[j];
+                if (row == null) continue;
+                for (int z = 0; z < cols && z < row.Length; z++)
+                {
+                    char ch = row[z];
+                    g[j, z] = ch != '_' && ch != ' ';
+                }
+            }
+            return g;
         }
 
         /// <summary>Renders one recipe as: [ingredient] + [ingredient] = [output]  (extra info)</summary>

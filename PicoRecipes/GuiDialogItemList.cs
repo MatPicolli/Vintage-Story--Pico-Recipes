@@ -96,7 +96,8 @@ namespace PicoRecipes
             gridElem = new GuiElementClickableSlotGrid(capi, inv, Columns, gridBounds)
             {
                 OnSlotClicked = OnSlotClicked,
-                OnScrollPage = delta => ChangePage(delta)
+                OnScrollPage = delta => ChangePage(delta),
+                OnShiftScroll = dir => mod.HoverDialog.CycleRecipe(dir)
             };
 
             Composers[GridKey]?.Dispose();

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cairo;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -87,12 +88,20 @@ namespace PicoRecipes
         {
             BrowsePage current = history.Peek();
 
-            ElementBounds textBounds = ElementBounds.Fixed(9, 45, ViewWidth, 30 + ViewHeight + 17);
+            double titleH = GuiStyle.TitleBarHeight;   // 31
+            const double tabH = 30;
+            double contentTop = titleH + 6 + tabH + 10;  // title, gap, tabs, gap
+
+            // The title bar gets its own explicit bounds so it takes part in the layout; the tabs
+            // then sit clearly below it (previously they were placed in the title-bar row and
+            // overlapped the "Pico Recipes" title).
+            ElementBounds titleBarBounds = ElementBounds.Fixed(0, 0, ViewWidth + 34, titleH);
+            ElementBounds tabBounds = ElementBounds.Fixed(0, titleH + 6, ViewWidth + 34, tabH);
+
+            ElementBounds textBounds = ElementBounds.Fixed(9, contentTop, ViewWidth, ViewHeight);
             ElementBounds clipBounds = textBounds.ForkBoundingParent();
             ElementBounds insetBounds = textBounds.FlatCopy().FixedGrow(6).WithFixedOffset(-3, -3);
             ElementBounds scrollbarBounds = clipBounds.CopyOffsetedSibling(textBounds.fixedWidth + 7, -6, 0, 6).WithFixedWidth(20);
-
-            ElementBounds tabBounds = ElementBounds.Fixed(-1, -16, 300, 25);
 
             ElementBounds backButtonBounds = ElementBounds
                 .FixedSize(0, 0)
@@ -107,8 +116,9 @@ namespace PicoRecipes
                 .WithFixedPadding(20, 4)
                 .WithFixedAlignmentOffset(-11, 1);
 
-            ElementBounds bgBounds = insetBounds.ForkBoundingParent(5, 40, 36, 52).WithFixedPadding(GuiStyle.ElementToDialogPadding / 2);
-            bgBounds.WithChildren(insetBounds, textBounds, scrollbarBounds, backButtonBounds, closeButtonBounds);
+            ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding / 2);
+            bgBounds.BothSizing = ElementSizing.FitToChildren;
+            bgBounds.WithChildren(titleBarBounds, tabBounds, insetBounds, textBounds, scrollbarBounds, backButtonBounds, closeButtonBounds);
 
             ElementBounds dialogBounds = bgBounds.ForkBoundingParent()
                 .WithAlignment(EnumDialogArea.CenterFixed)
@@ -121,13 +131,14 @@ namespace PicoRecipes
 
             RichTextComponentBase[] components = builder.BuildFull(current.Stack, current.Usages);
 
+            var tabFont = CairoFont.WhiteSmallText().WithWeight(FontWeight.Bold);
             SingleComposer?.Dispose();
             SingleComposer = capi.Gui
                 .CreateCompo("picorecipes-browser", dialogBounds)
                 .AddShadedDialogBG(bgBounds, true)
-                .AddDialogTitleBar(Loc.T("dialog-title", "Pico Recipes"), () => TryClose())
+                .AddDialogTitleBar(Loc.T("dialog-title", "Pico Recipes"), () => TryClose(), bounds: titleBarBounds)
                 .BeginChildElements(bgBounds)
-                    .AddHorizontalTabs(tabs, tabBounds, OnTabClicked, CairoFont.WhiteSmallText(), CairoFont.WhiteSmallText().WithColor(GuiStyle.ActiveButtonTextColor), "tabs")
+                    .AddHorizontalTabs(tabs, tabBounds, OnTabClicked, tabFont, tabFont.Clone().WithColor(GuiStyle.ActiveButtonTextColor), "tabs")
                     .BeginClip(clipBounds)
                         .AddInset(insetBounds, 3)
                         .AddRichtext(components, textBounds, "richtext")
