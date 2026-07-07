@@ -172,6 +172,13 @@ namespace PicoRecipes
                 ItemListDialog.TryClose();
             }
 
+            // The recipe browser is always opened from an inventory context, so close it together
+            // with the inventory (it does not otherwise get closed when you press E).
+            if (!inventoryOpen && BrowserDialog.IsOpened())
+            {
+                BrowserDialog.TryClose();
+            }
+
             bool overlayVisible = ItemListDialog.IsOpened();
             UpdateMinimap(overlayVisible);
 

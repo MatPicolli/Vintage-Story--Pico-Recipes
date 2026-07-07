@@ -227,9 +227,9 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Render a
-        /// single top-down silhouette (all layers merged) as one small pixel grid. (Rendering each
-        /// layer separately overlapped badly for larger shapes, so it is one clean grid instead.)
+        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. We show a
+        /// single representative layer (the one with the most voxels) as one small pixel grid, rather
+        /// than every layer — multi-layer rendering was cluttered and slow.
         /// </summary>
         void AddVoxelPatterns(List<RichTextComponentBase> components, RecipeBase recipe)
         {
@@ -239,38 +239,41 @@ namespace PicoRecipes
                 var patternField = recipe.GetType().GetField("Pattern");
                 if (patternField?.GetValue(recipe) is not string[][] pattern || pattern.Length == 0) return;
 
-                int rows = 0;
+                // Pick the fullest layer as the single representative shape.
+                string[] best = null;
+                int bestFilled = -1;
                 foreach (string[] layer in pattern)
-                    if (layer != null && layer.Length > rows) rows = layer.Length;
+                {
+                    if (layer == null) continue;
+                    int filled = 0;
+                    foreach (string row in layer)
+                        if (row != null)
+                            foreach (char ch in row)
+                                if (ch != '_' && ch != ' ') filled++;
+                    if (filled > bestFilled) { bestFilled = filled; best = layer; }
+                }
+                if (best == null) return;
 
+                int rows = best.Length;
                 int cols = 0;
-                foreach (string[] layer in pattern)
-                    if (layer != null)
-                        foreach (string row in layer)
-                            if (row != null && row.Length > cols) cols = row.Length;
-
+                foreach (string row in best)
+                    if (row != null && row.Length > cols) cols = row.Length;
                 if (rows == 0 || cols == 0) return;
 
-                var merged = new bool[rows, cols];
+                var grid = new bool[rows, cols];
                 for (int j = 0; j < rows; j++)
                 {
-                    for (int z = 0; z < cols; z++)
+                    string row = best[j];
+                    if (row == null) continue;
+                    for (int z = 0; z < cols && z < row.Length; z++)
                     {
-                        bool filled = false;
-                        foreach (string[] layer in pattern)
-                        {
-                            if (layer == null || j >= layer.Length) continue;
-                            string row = layer[j];
-                            if (row == null || z >= row.Length) continue;
-                            char ch = row[z];
-                            if (ch != '_' && ch != ' ') { filled = true; break; }
-                        }
-                        merged[j, z] = filled;
+                        char ch = row[z];
+                        grid[j, z] = ch != '_' && ch != ' ';
                     }
                 }
 
                 components.Add(new ClearFloatTextComponent(capi, 4));
-                components.Add(new VoxelPatternComponent(capi, merged) { PaddingLeft = 6 });
+                components.Add(new VoxelPatternComponent(capi, grid) { PaddingLeft = 6 });
                 components.Add(new ClearFloatTextComponent(capi, 4));
             }
             catch (Exception) { }

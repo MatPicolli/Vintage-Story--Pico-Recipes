@@ -130,11 +130,10 @@ namespace PicoRecipes
                     if (stack?.Collectible == null) continue;
                     stacks.Add(stack);
 
-                    // Search on the localized name + the code. This runs on the background thread,
-                    // so the (previously main-thread) name resolution no longer freezes the client.
-                    string name;
-                    try { name = stack.GetName(); } catch (Exception) { name = null; }
-                    texts.Add(((name ?? "") + " " + stack.Collectible.Code).ToLowerInvariant());
+                    // Search on the item code only. Resolving localized names (GetName ->
+                    // Lang.GetMatching) for every one of ~30k stacks is what made the index build
+                    // slow; codes contain the searchable words and match is word-based.
+                    texts.Add(stack.Collectible.Code.ToString().ToLowerInvariant());
                 }
             }
 
