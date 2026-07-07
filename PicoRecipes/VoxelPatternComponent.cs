@@ -45,8 +45,7 @@ namespace PicoRecipes
 
             if (this.label != null)
             {
-                labelFont = CairoFont.WhiteDetailText().WithColor(GuiStyle.ColorParchment);
-                labelFont.UnscaledFontSize = 12;
+                labelFont = CairoFont.WhiteDetailText().WithColor(GuiStyle.ColorParchment).WithFontSize(12);
                 labelHeightUnscaled = 13;
             }
 
