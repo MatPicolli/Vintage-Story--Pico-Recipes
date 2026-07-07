@@ -5,21 +5,26 @@ A **"Just Enough Items" (JEI)** style item and recipe browser for **Vintage Stor
 If you know JEI from Minecraft, you already know how to use this mod:
 
 - A **searchable item list** appears next to your inventory, listing every item and block in the game (including those added by other mods).
-- **Left click** an item (or hover it and press **R**) to see **how it is made**.
+- **Hover** an item to see a compact recipe preview pop up next to it.
+- **Left click** an item (or hover it and press **R**) to see **how it is made** in the full browser.
 - **Right click** an item (or hover it and press **U**) to see **what it is used for**.
 - Click any ingredient or output inside the recipe view to drill down into *its* recipes, with a **Back** button to retrace your steps.
 - In **creative mode**, **shift-click** an item in the list to give yourself one (JEI "cheat mode").
+- Press **Ctrl+O** at any time to turn the whole overlay on or off.
 
 ## Features
 
 | JEI feature | Pico Recipes |
 |---|---|
-| Item list panel on container screens | Auto-shows beside your inventory (and chests, crafting, etc.), auto-hides when closed. Toggle manually with **Ctrl+O**. |
-| Search bar | Live filtering by item name or code. `@modid` filters by mod, e.g. `@game sword` — just like JEI's `@mod`. |
+| Item list panel on container screens | Semi-transparent panel that appears beside your inventory (and chests, crafting, etc.) in lockstep, and disappears when you close them. |
+| Enable/disable overlay | **Ctrl+O** toggles the whole overlay on or off; the choice is remembered between sessions. |
+| Search bar | Docked at the bottom center of the screen (JEI style). Only captures typing once you click it. Live filtering by item name or code; `@modid` filters by mod, e.g. `@game sword`. |
+| Hover preview | Hover an item in the list and a compact recipe pops up next to it — no click needed. |
 | Pagination | `<` / `>` buttons or **mouse wheel** over the grid. |
-| Recipe view (R / left click) | Grid crafting (with variant slideshows, exactly like the vanilla handbook), smithing, clay forming, knapping, barrel mixing/aging, smelting/cooking, grinding and crushing. |
+| Recipe view (R / left click) | Grid crafting (with variant slideshows, exactly like the vanilla handbook), smithing, clay forming, knapping, barrel mixing/aging, smelting/cooking, grinding and crushing. Drawn above the inventory so it is never hidden behind it. |
 | Usage view (U / right click) | Everything the item participates in as an ingredient or process input. |
 | Recipe drill-down + history | Click any stack in the recipe browser; Back button pops the history. |
+| Minimap | Hidden automatically while the overlay is up, restored when it closes. |
 | Cheat mode | Shift-click gives the item — creative mode only, validated server side. |
 | Tooltips | Standard Vintage Story item tooltips everywhere. |
 
@@ -69,7 +74,13 @@ workflow in this repo does all of the above automatically and uploads the zip as
   grid backed by a `DummyInventory`. Clicks never move items; they open the browser instead.
   A lightweight game-tick watcher auto-opens/closes the panel alongside inventory-like dialogs.
 - **Recipe browser** (`GuiDialogRecipeBrowser`): a scrollable richtext page with Recipes/Usages
-  tabs, composed from the same text components the vanilla handbook uses.
+  tabs, composed from the same text components the vanilla handbook uses (`RecipeComponentBuilder`,
+  shared with the hover preview). It draws above the inventory so it is never hidden behind it.
+- **Hover preview** (`GuiDialogRecipeHover`): a passive HUD popup that renders a compact recipe for
+  the item under the cursor after a short dwell. It skips the expensive process scan so hovering
+  stays smooth.
+- **Minimap handling**: while the overlay is up, the vanilla minimap HUD is located at runtime by
+  type name and closed, then reopened afterwards (best effort — no dependency on the map mod).
 - **Recipe index** (`RecipeIndex`): grid recipes come straight from `IWorldAccessor.GridRecipes`.
   Smithing, knapping, clay forming and barrel recipes are read from the survival mod's
   `RecipeRegistrySystem` via reflection — no compile-time dependency on `VSSurvivalMod.dll` —

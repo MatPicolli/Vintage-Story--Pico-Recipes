@@ -1,7 +1,10 @@
 {
-    "hotkey-toggle-overlay": "Pico Recipes: Toggle item list",
+    "hotkey-toggle": "Pico Recipes: Enable/disable overlay",
     "hotkey-show-recipes": "Pico Recipes: Show recipes for hovered item",
     "hotkey-show-usages": "Pico Recipes: Show usages of hovered item",
+
+    "enabled-msg": "Pico Recipes overlay enabled",
+    "disabled-msg": "Pico Recipes overlay disabled",
 
     "search-placeholder": "Search... (@mod filters by mod)",
     "itemlist-title": "Items",
@@ -9,6 +12,8 @@
     "dialog-title": "Pico Recipes",
     "tab-recipes": "Recipes",
     "tab-usages": "Usages",
+    "used-in-label": "Used in:",
+    "hover-hint": "Left / R: recipes   ·   Right / U: usages",
 
     "heading-crafting": "Crafting",
     "heading-smithing": "Smithing",

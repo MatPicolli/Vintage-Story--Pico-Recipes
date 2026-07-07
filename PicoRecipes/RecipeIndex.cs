@@ -142,7 +142,11 @@ namespace PicoRecipes
         }
 
         /// <summary>All recipes that produce the given stack ("how do I make this?").</summary>
-        public RecipeSections GetCreatedBy(ItemStack stack)
+        /// <param name="includeProcesses">
+        /// When true, scans every known stack to find smelting/grinding/crushing that yields this
+        /// stack (O(all items), used for the full browser). Set false for the hover preview.
+        /// </param>
+        public RecipeSections GetCreatedBy(ItemStack stack, bool includeProcesses = true)
         {
             EnsureLoaded();
             var result = new RecipeSections();
@@ -193,9 +197,12 @@ namespace PicoRecipes
             result.Barrel = FilterByOutput(barrel, stack);
 
             // Processes producing this stack: scan all known stacks once
-            foreach (ItemStack input in AllStacks)
+            if (includeProcesses)
             {
-                CollectProcesses(input, onlyOutputMatching: stack, result);
+                foreach (ItemStack input in AllStacks)
+                {
+                    CollectProcesses(input, onlyOutputMatching: stack, result);
+                }
             }
 
             return result;

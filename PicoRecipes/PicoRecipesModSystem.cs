@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Linq;
 using ProtoBuf;
 using Vintagestory.API.Client;
@@ -19,15 +18,16 @@ namespace PicoRecipes
     /// <summary>
     /// Pico Recipes: a "Just Enough Items" (JEI) style item and recipe browser for Vintage Story.
     ///
-    /// Client side it provides the item list overlay and the recipe browser. The (optional)
-    /// server side part only handles creative mode item spawning (JEI "cheat mode").
+    /// Client side it provides the item list overlay, the recipe browser and the hover preview.
+    /// The (optional) server side part only handles creative mode item spawning (JEI "cheat mode").
     /// </summary>
     public class PicoRecipesModSystem : ModSystem
     {
         public const string ChannelName = "picorecipes";
-        public const string HotkeyToggleOverlay = "picorecipestoggle";
+        public const string HotkeyToggle = "picorecipestoggle";
         public const string HotkeyRecipes = "picorecipesrecipes";
         public const string HotkeyUsages = "picorecipesusages";
+        public const string EnabledSetting = "picorecipesEnabled";
 
         ICoreClientAPI capi;
         IClientNetworkChannel clientChannel;
@@ -35,11 +35,15 @@ namespace PicoRecipes
         public RecipeIndex RecipeIndex { get; private set; }
         public GuiDialogItemList ItemListDialog { get; private set; }
         public GuiDialogRecipeBrowser BrowserDialog { get; private set; }
+        public GuiDialogRecipeHover HoverDialog { get; private set; }
 
-        // Auto show/hide state for the overlay
-        bool userHidOverlay;
-        bool autoOpened;
-        bool programmaticChange;
+        /// <summary>Master on/off switch toggled with Ctrl+O and persisted across sessions.</summary>
+        public bool Enabled { get; private set; } = true;
+
+        // Minimap hiding
+        GuiDialog minimapHud;
+        bool minimapHiddenByUs;
+        bool overlayWasVisible;
 
         public override void Start(ICoreAPI api)
         {
@@ -89,14 +93,17 @@ namespace PicoRecipes
             capi = api;
             clientChannel = api.Network.GetChannel(ChannelName);
 
+            Enabled = api.Settings.Bool.Get(EnabledSetting, true);
+
             RecipeIndex = new RecipeIndex(api);
             BrowserDialog = new GuiDialogRecipeBrowser(api, this);
+            HoverDialog = new GuiDialogRecipeHover(api, this);
             ItemListDialog = new GuiDialogItemList(api, this);
-            api.Gui.RegisterDialog(BrowserDialog, ItemListDialog);
+            api.Gui.RegisterDialog(BrowserDialog, HoverDialog, ItemListDialog);
 
-            api.Input.RegisterHotKey(HotkeyToggleOverlay, Lang.Get("picorecipes:hotkey-toggle-overlay"),
+            api.Input.RegisterHotKey(HotkeyToggle, Lang.Get("picorecipes:hotkey-toggle"),
                 GlKeys.O, HotkeyType.GUIOrOtherControls, ctrlPressed: true);
-            api.Input.SetHotKeyHandler(HotkeyToggleOverlay, OnToggleOverlayHotkey);
+            api.Input.SetHotKeyHandler(HotkeyToggle, OnToggleHotkey);
 
             api.Input.RegisterHotKey(HotkeyRecipes, Lang.Get("picorecipes:hotkey-show-recipes"),
                 GlKeys.R, HotkeyType.GUIOrOtherControls);
@@ -106,24 +113,23 @@ namespace PicoRecipes
                 GlKeys.U, HotkeyType.GUIOrOtherControls);
             api.Input.SetHotKeyHandler(HotkeyUsages, _ => ShowForHoveredStack(usages: true));
 
-            api.Event.RegisterGameTickListener(OnClientTick, 150);
+            // Fast tick so the overlay appears in lockstep with the inventory (no visible delay).
+            api.Event.RegisterGameTickListener(OnClientTick, 20);
         }
 
-        bool OnToggleOverlayHotkey(KeyCombination comb)
+        bool OnToggleHotkey(KeyCombination comb)
         {
-            programmaticChange = true;
-            if (ItemListDialog.IsOpened())
+            Enabled = !Enabled;
+            capi.Settings.Bool.Set(EnabledSetting, Enabled, false);
+
+            if (!Enabled)
             {
-                ItemListDialog.TryClose();
-                if (autoOpened) userHidOverlay = true;
+                if (ItemListDialog.IsOpened()) ItemListDialog.TryClose();
+                HoverDialog.Hide();
+                RestoreMinimap();
             }
-            else
-            {
-                ItemListDialog.TryOpen();
-                userHidOverlay = false;
-                autoOpened = false;  // manually opened: keep it open even without an inventory
-            }
-            programmaticChange = false;
+
+            capi.ShowChatMessage(Lang.Get(Enabled ? "picorecipes:enabled-msg" : "picorecipes:disabled-msg"));
             return true;
         }
 
@@ -138,49 +144,104 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// JEI behavior: the item list shows up automatically whenever an inventory-like
-        /// dialog is on screen, and goes away when they are all closed.
+        /// JEI behavior: the item list shows up automatically whenever an inventory-like dialog is
+        /// on screen (when the mod is enabled), and goes away when they are all closed.
         /// </summary>
         void OnClientTick(float dt)
         {
             if (capi.World?.Player == null || ItemListDialog == null) return;
 
             bool inventoryOpen = capi.Gui.OpenedGuis.Any(IsInventoryLikeDialog);
+            bool shouldShow = Enabled && inventoryOpen;
 
-            if (inventoryOpen && !ItemListDialog.IsOpened() && !userHidOverlay)
+            if (shouldShow && !ItemListDialog.IsOpened())
             {
-                programmaticChange = true;
-                autoOpened = ItemListDialog.TryOpen(false);
-                programmaticChange = false;
+                ItemListDialog.TryOpen(false);
             }
-            else if (!inventoryOpen)
+            else if (!shouldShow && ItemListDialog.IsOpened())
             {
-                if (ItemListDialog.IsOpened() && autoOpened)
-                {
-                    programmaticChange = true;
-                    ItemListDialog.TryClose();
-                    programmaticChange = false;
-                    autoOpened = false;
-                }
-                userHidOverlay = false;
+                ItemListDialog.TryClose();
             }
+
+            bool overlayVisible = ItemListDialog.IsOpened();
+            UpdateMinimap(overlayVisible);
+
+            if (overlayVisible) ItemListDialog.UpdateHoverPreview(dt);
+            else HoverDialog.Hide();
         }
 
         bool IsInventoryLikeDialog(object dlg)
         {
             if (dlg is not GuiDialog dialog) return false;
-            if (dialog == ItemListDialog || dialog == BrowserDialog) return false;
+            if (dialog == ItemListDialog || dialog == BrowserDialog || dialog == HoverDialog) return false;
             if (dialog is GuiDialogBlockEntity) return true;
 
             string name = dialog.GetType().Name;
             return name.Contains("Inventory") || name.Contains("Character");
         }
 
-        /// <summary>Called when the user closed the overlay themselves (e.g. escape key).</summary>
         public void OnItemListClosedByUser()
         {
-            if (!programmaticChange && autoOpened) userHidOverlay = true;
+            // The overlay was closed (escape, inventory closing, or the master toggle). Make sure
+            // the transient preview and the minimap are restored.
+            HoverDialog?.Hide();
+            RestoreMinimap();
         }
+
+        #region Minimap hiding
+
+        void UpdateMinimap(bool overlayVisible)
+        {
+            // Act only on transitions so we never fight the map mod frame to frame.
+            if (overlayVisible == overlayWasVisible) return;
+            overlayWasVisible = overlayVisible;
+
+            if (overlayVisible)
+            {
+                GuiDialog hud = FindMinimapHud();
+                if (hud != null && hud.IsOpened())
+                {
+                    hud.TryClose();
+                    minimapHiddenByUs = true;
+                }
+            }
+            else
+            {
+                RestoreMinimap();
+            }
+        }
+
+        void RestoreMinimap()
+        {
+            if (minimapHiddenByUs)
+            {
+                minimapHud?.TryOpen();
+                minimapHiddenByUs = false;
+            }
+        }
+
+        /// <summary>
+        /// Locates the vanilla minimap HUD dialog at runtime by type name, so we do not need a
+        /// compile time dependency on the world map mod. The minimap is the HUD-type map dialog.
+        /// </summary>
+        GuiDialog FindMinimapHud()
+        {
+            if (minimapHud != null) return minimapHud;
+
+            foreach (GuiDialog dlg in capi.Gui.LoadedGuis)
+            {
+                string name = dlg.GetType().Name;
+                if (dlg.DialogType == EnumDialogType.HUD &&
+                    (name.Contains("WorldMap") || name.Contains("Minimap")))
+                {
+                    minimapHud = dlg;
+                    break;
+                }
+            }
+            return minimapHud;
+        }
+
+        #endregion
 
         /// <summary>JEI "cheat mode": shift-click in the item list gives the item (creative mode only).</summary>
         public void RequestGiveStack(ItemStack stack)

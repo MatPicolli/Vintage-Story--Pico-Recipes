@@ -9,29 +9,41 @@ using Vintagestory.API.Util;
 namespace PicoRecipes
 {
     /// <summary>
-    /// The JEI style item list overlay: a searchable, paged grid of every item and block
-    /// in the game, docked to the right edge of the screen while an inventory is open.
-    /// Left click / R shows recipes, right click / U shows usages,
-    /// shift click spawns the item when playing in creative mode.
+    /// The JEI style item list overlay: a paged grid of every item and block in the game shown as
+    /// a semi-transparent panel on the right of the screen, with a search box docked at the bottom
+    /// center (JEI style). Left click / R shows recipes, right click / U shows usages, shift click
+    /// spawns the item in creative mode, and hovering shows a compact recipe preview.
     /// </summary>
     public class GuiDialogItemList : GuiDialog
     {
         readonly PicoRecipesModSystem mod;
 
+        const string GridKey = "picorecipes-grid";
+        const string SearchKey = "picorecipes-search";
+
         const int Columns = 9;
-        const int Rows = 11;
+        const int Rows = 12;
         const int SlotsPerPage = Columns * Rows;
 
         DummyInventory inv;
+        GuiElementClickableSlotGrid gridElem;
         readonly List<int> filteredIndices = new List<int>();
         string searchText = "";
         int page;
+
+        // Hover-preview tracking
+        int lastHoverSlotId = -1;
+        float hoverAccumSec;
 
         public override string ToggleKeyCombinationCode => null;
         public override bool PrefersUngrabbedMouse => true;
         public override bool UnregisterOnClose => false;
         public override EnumDialogType DialogType => EnumDialogType.Dialog;
         public override bool DisableMouseGrab => false;
+
+        // Sits above the minimap HUD (0.07) but below the inventory (0.2); it is docked right so it
+        // does not overlap the centered inventory anyway.
+        public override double DrawOrder => 0.13;
 
         public GuiDialogItemList(ICoreClientAPI capi, PicoRecipesModSystem mod) : base(capi)
         {
@@ -49,6 +61,14 @@ namespace PicoRecipes
             ComposeDialog();
         }
 
+        public override void OnGuiClosed()
+        {
+            base.OnGuiClosed();
+            mod.HoverDialog.Hide();
+            lastHoverSlotId = -1;
+            mod.OnItemListClosedByUser();
+        }
+
         int PageCount => Math.Max(1, (filteredIndices.Count + SlotsPerPage - 1) / SlotsPerPage);
 
         void ComposeDialog()
@@ -56,33 +76,31 @@ namespace PicoRecipes
             double slotSize = GuiElementPassiveItemSlot.unscaledSlotSize + GuiElementItemSlotGridBase.unscaledSlotPadding;
             double gridWidth = Columns * slotSize;
 
-            ElementBounds searchBounds = ElementBounds.Fixed(0, 30, gridWidth - 2 * 34 - 12, 30);
-            ElementBounds prevBounds = ElementBounds.Fixed(gridWidth - 2 * 34 - 4, 30, 30, 30);
-            ElementBounds nextBounds = ElementBounds.Fixed(gridWidth - 34, 30, 30, 30);
-            ElementBounds pageLabelBounds = ElementBounds.Fixed(0, 68, gridWidth, 20);
-            ElementBounds gridBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 94, Columns, Rows);
+            // ----- Right-docked, semi-transparent item grid panel -----
+            ElementBounds prevBounds = ElementBounds.Fixed(0, 0, gridWidth / 2 - 4, 26);
+            ElementBounds nextBounds = ElementBounds.Fixed(gridWidth / 2 + 4, 0, gridWidth / 2 - 4, 26);
+            ElementBounds pageLabelBounds = ElementBounds.Fixed(0, 30, gridWidth, 20);
+            ElementBounds gridBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 56, Columns, Rows);
 
-            ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
-            bgBounds.BothSizing = ElementSizing.FitToChildren;
-            bgBounds.WithChildren(searchBounds, prevBounds, nextBounds, pageLabelBounds, gridBounds);
+            ElementBounds gridPanelBg = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
+            gridPanelBg.BothSizing = ElementSizing.FitToChildren;
+            gridPanelBg.WithChildren(prevBounds, nextBounds, pageLabelBounds, gridBounds);
 
-            ElementBounds dialogBounds = ElementStdBounds.AutosizedMainDialog
+            ElementBounds gridDialogBounds = gridPanelBg.ForkBoundingParent()
                 .WithAlignment(EnumDialogArea.RightMiddle)
                 .WithFixedAlignmentOffset(-GuiStyle.DialogToScreenPadding, 0);
 
-            var gridElem = new GuiElementClickableSlotGrid(capi, inv, Columns, gridBounds)
+            gridElem = new GuiElementClickableSlotGrid(capi, inv, Columns, gridBounds)
             {
                 OnSlotClicked = OnSlotClicked,
                 OnScrollPage = delta => ChangePage(delta)
             };
 
-            SingleComposer?.Dispose();
-            SingleComposer = capi.Gui
-                .CreateCompo("picorecipes-itemlist", dialogBounds)
-                .AddShadedDialogBG(bgBounds, true)
-                .AddDialogTitleBar(Lang.Get("picorecipes:itemlist-title"), () => TryClose())
-                .BeginChildElements(bgBounds)
-                    .AddTextInput(searchBounds, OnSearchTextChanged, CairoFont.WhiteSmallishText(), "searchbox")
+            Composers[GridKey]?.Dispose();
+            Composers[GridKey] = capi.Gui
+                .CreateCompo(GridKey, gridDialogBounds)
+                .AddGameOverlay(gridPanelBg, new double[] { 0, 0, 0, 0.35 })
+                .BeginChildElements(gridPanelBg)
                     .AddSmallButton("<", () => ChangePage(-1), prevBounds)
                     .AddSmallButton(">", () => ChangePage(1), nextBounds)
                     .AddDynamicText("", CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center), pageLabelBounds, "pagelabel")
@@ -90,7 +108,27 @@ namespace PicoRecipes
                 .EndChildElements()
                 .Compose();
 
-            var searchbox = SingleComposer.GetTextInput("searchbox");
+            // ----- Bottom-center search box -----
+            ElementBounds searchBounds = ElementBounds.Fixed(0, 0, 320, 30);
+            ElementBounds searchPanelBg = ElementBounds.Fill.WithFixedPadding(6);
+            searchPanelBg.BothSizing = ElementSizing.FitToChildren;
+            searchPanelBg.WithChildren(searchBounds);
+
+            // Centered at the bottom, lifted above the hotbar so the two do not overlap.
+            ElementBounds searchDialogBounds = searchPanelBg.ForkBoundingParent()
+                .WithAlignment(EnumDialogArea.CenterBottom)
+                .WithFixedAlignmentOffset(0, -95);
+
+            Composers[SearchKey]?.Dispose();
+            Composers[SearchKey] = capi.Gui
+                .CreateCompo(SearchKey, searchDialogBounds)
+                .AddGameOverlay(searchPanelBg, new double[] { 0, 0, 0, 0.45 })
+                .BeginChildElements(searchPanelBg)
+                    .AddTextInput(searchBounds, OnSearchTextChanged, CairoFont.WhiteSmallishText(), "searchbox")
+                .EndChildElements()
+                .Compose();
+
+            var searchbox = Composers[SearchKey].GetTextInput("searchbox");
             searchbox.SetPlaceHolderText(Lang.Get("picorecipes:search-placeholder"));
             searchbox.SetValue(searchText, false);
 
@@ -152,7 +190,7 @@ namespace PicoRecipes
 
         void FillPage()
         {
-            if (inv == null || SingleComposer == null) return;
+            if (inv == null || !Composers.ContainsKey(GridKey)) return;
 
             page = GameMath.Clamp(page, 0, PageCount - 1);
             int start = page * SlotsPerPage;
@@ -172,9 +210,13 @@ namespace PicoRecipes
                 }
             }
 
-            SingleComposer.GetDynamicText("pagelabel")?.SetNewText(
+            Composers[GridKey].GetDynamicText("pagelabel")?.SetNewText(
                 $"{page + 1} / {PageCount}  ({filteredIndices.Count})"
             );
+
+            // The visible items changed; drop any stale hover preview.
+            lastHoverSlotId = -1;
+            mod.HoverDialog.Hide();
         }
 
         void OnSlotClicked(int slotId, EnumMouseButton button, bool shiftPressed)
@@ -198,12 +240,42 @@ namespace PicoRecipes
             }
         }
 
-        public override void OnGuiClosed()
+        /// <summary>Called every frame by the mod system to drive the hover preview popup.</summary>
+        public void UpdateHoverPreview(float dt)
         {
-            base.OnGuiClosed();
-            // Covers escape, the title bar close button and hotkeys alike; the mod system
-            // ignores this while it is opening/closing the overlay programmatically.
-            mod.OnItemListClosedByUser();
+            if (gridElem == null || !IsOpened()) return;
+
+            int hoverId = gridElem.hoverSlotId;
+            ItemStack stack = hoverId >= 0 && hoverId < inv.Count ? inv[hoverId]?.Itemstack : null;
+
+            if (hoverId != lastHoverSlotId)
+            {
+                lastHoverSlotId = hoverId;
+                hoverAccumSec = 0;
+                mod.HoverDialog.Hide();
+                return;
+            }
+
+            if (stack == null) return;
+
+            // Small delay so quick mouse sweeps do not spam recipe lookups.
+            hoverAccumSec += dt;
+            if (hoverAccumSec < 0.25f) return;
+
+            double anchorX, anchorY;
+            if (hoverId < gridElem.SlotBounds.Length)
+            {
+                var sb = gridElem.SlotBounds[hoverId];
+                anchorX = sb.renderX;
+                anchorY = sb.renderY + sb.OuterHeight / 2;
+            }
+            else
+            {
+                anchorX = capi.Input.MouseX;
+                anchorY = capi.Input.MouseY;
+            }
+
+            mod.HoverDialog.ShowFor(stack, anchorX, anchorY);
         }
     }
 }
