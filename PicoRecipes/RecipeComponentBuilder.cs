@@ -227,9 +227,11 @@ namespace PicoRecipes
         }
 
         /// <summary>
-        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. We show a
-        /// single representative layer (the one with the most voxels) as one small pixel grid, rather
-        /// than every layer — multi-layer rendering was cluttered and slow.
+        /// Clay forming / knapping / smithing recipes are voxel shapes rather than grids. Single-layer
+        /// recipes (knapping) show one readable grid. Multi-layer recipes (clay forming, smithing) are
+        /// shown as a step-by-step sequence: one small numbered tile per layer, in build order (bottom
+        /// to top). Each tile wraps itself onto the next line when it does not fit, so the sequence fits
+        /// both the wide recipe browser and the narrow hover tooltip.
         /// </summary>
         void AddVoxelPatterns(List<RichTextComponentBase> components, RecipeBase recipe)
         {
@@ -239,44 +241,72 @@ namespace PicoRecipes
                 var patternField = recipe.GetType().GetField("Pattern");
                 if (patternField?.GetValue(recipe) is not string[][] pattern || pattern.Length == 0) return;
 
-                // Pick the fullest layer as the single representative shape.
-                string[] best = null;
-                int bestFilled = -1;
+                // Turn each layer into a grid, keeping only the ones that actually have voxels (an empty
+                // layer is not a build step). Order is preserved: layer 0 is the bottom.
+                var layers = new List<bool[,]>();
                 foreach (string[] layer in pattern)
                 {
-                    if (layer == null) continue;
-                    int filled = 0;
-                    foreach (string row in layer)
-                        if (row != null)
-                            foreach (char ch in row)
-                                if (ch != '_' && ch != ' ') filled++;
-                    if (filled > bestFilled) { bestFilled = filled; best = layer; }
+                    bool[,] grid = LayerToGrid(layer, out int filled);
+                    if (grid != null && filled > 0) layers.Add(grid);
                 }
-                if (best == null) return;
+                if (layers.Count == 0) return;
 
-                int rows = best.Length;
-                int cols = 0;
-                foreach (string row in best)
-                    if (row != null && row.Length > cols) cols = row.Length;
-                if (rows == 0 || cols == 0) return;
+                components.Add(new ClearFloatTextComponent(capi, 4));
 
-                var grid = new bool[rows, cols];
-                for (int j = 0; j < rows; j++)
+                if (layers.Count == 1)
                 {
-                    string row = best[j];
-                    if (row == null) continue;
-                    for (int z = 0; z < cols && z < row.Length; z++)
+                    // Single layer (e.g. knapping): one readable grid, no step numbering.
+                    components.Add(new VoxelPatternComponent(capi, layers[0]) { PaddingLeft = 6 });
+                }
+                else
+                {
+                    // Multi-layer (clay forming / smithing): numbered build steps, bottom to top.
+                    components.Add(new RichTextComponent(capi,
+                        Loc.T("voxel-layers-caption", "Build layer by layer (bottom → top):") + "\n",
+                        CairoFont.WhiteDetailText().WithColor(GuiStyle.ColorParchment)));
+                    components.Add(new ClearFloatTextComponent(capi, 2));
+
+                    for (int i = 0; i < layers.Count; i++)
                     {
-                        char ch = row[z];
-                        grid[j, z] = ch != '_' && ch != ' ';
+                        components.Add(new VoxelPatternComponent(capi, layers[i], (i + 1).ToString(),
+                            maxCellUnscaled: 4, maxTotalUnscaled: 52)
+                        {
+                            PaddingLeft = i == 0 ? 6 : 8
+                        });
                     }
                 }
 
                 components.Add(new ClearFloatTextComponent(capi, 4));
-                components.Add(new VoxelPatternComponent(capi, grid) { PaddingLeft = 6 });
-                components.Add(new ClearFloatTextComponent(capi, 4));
             }
             catch (Exception) { }
+        }
+
+        /// <summary>Converts one voxel layer (rows of '#'/'_' style chars) into a bool grid.</summary>
+        static bool[,] LayerToGrid(string[] layer, out int filled)
+        {
+            filled = 0;
+            if (layer == null) return null;
+
+            int rows = layer.Length;
+            int cols = 0;
+            foreach (string row in layer)
+                if (row != null && row.Length > cols) cols = row.Length;
+            if (rows == 0 || cols == 0) return null;
+
+            var grid = new bool[rows, cols];
+            for (int j = 0; j < rows; j++)
+            {
+                string row = layer[j];
+                if (row == null) continue;
+                for (int z = 0; z < cols && z < row.Length; z++)
+                {
+                    char ch = row[z];
+                    bool on = ch != '_' && ch != ' ';
+                    grid[j, z] = on;
+                    if (on) filled++;
+                }
+            }
+            return grid;
         }
 
         /// <summary>Renders one recipe as: [ingredient] + [ingredient] = [output]  (extra info)</summary>
