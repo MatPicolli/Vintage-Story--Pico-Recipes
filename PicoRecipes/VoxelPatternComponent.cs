@@ -1,3 +1,4 @@
+using System;
 using Cairo;
 using Vintagestory.API.Client;
 
@@ -15,8 +16,12 @@ namespace PicoRecipes
         readonly bool[,] grid;
         readonly int rows;
         readonly int cols;
+        readonly double cellUnscaled;
 
-        const double CellUnscaled = 6.0;
+        // Keep the whole grid within this unscaled width so it can never be wider than the panel it
+        // is rendered in (which would otherwise make the richtext layout loop forever trying to wrap).
+        const double MaxTotalUnscaled = 90.0;
+        const double MaxCellUnscaled = 6.0;
 
         public VoxelPatternComponent(ICoreClientAPI capi, bool[,] grid) : base(capi)
         {
@@ -25,7 +30,9 @@ namespace PicoRecipes
             rows = grid.GetLength(0);
             cols = grid.GetLength(1);
 
-            double cell = GuiElement.scaled(CellUnscaled);
+            cellUnscaled = cols > 0 ? Math.Min(MaxCellUnscaled, MaxTotalUnscaled / cols) : MaxCellUnscaled;
+
+            double cell = GuiElement.scaled(cellUnscaled);
             BoundsPerLine = new[] { new LineRectangled(0, 0, cols * cell, rows * cell) };
             VerticalAlign = EnumVerticalAlign.Top;
         }
@@ -34,19 +41,25 @@ namespace PicoRecipes
         {
             TextFlowPath curfp = GetCurrentFlowPathSection(flowPath, lineY);
             offsetX += GuiElement.scaled(PaddingLeft);
-            bool requireLinebreak = offsetX + BoundsPerLine[0].Width > curfp.X2;
 
-            BoundsPerLine[0].X = requireLinebreak ? 0 : offsetX;
+            double width = BoundsPerLine[0].Width;
+
+            // Only wrap to the next line if we are NOT already at the start of a line. If the grid is
+            // wider than the whole line we place it anyway (it may clip) rather than wrapping forever.
+            bool atLineStart = offsetX <= curfp.X1 + GuiElement.scaled(1);
+            bool requireLinebreak = !atLineStart && (offsetX + width > curfp.X2);
+
+            BoundsPerLine[0].X = requireLinebreak ? curfp.X1 : offsetX;
             BoundsPerLine[0].Y = lineY + (requireLinebreak ? currentLineHeight : 0);
 
-            nextOffsetX = (requireLinebreak ? 0 : offsetX) + BoundsPerLine[0].Width;
+            nextOffsetX = BoundsPerLine[0].X + width;
 
             return requireLinebreak ? EnumCalcBoundsResult.Nextline : EnumCalcBoundsResult.Continue;
         }
 
         public override void ComposeElements(Context ctx, ImageSurface surface)
         {
-            double cell = GuiElement.scaled(CellUnscaled);
+            double cell = GuiElement.scaled(cellUnscaled);
             double x0 = BoundsPerLine[0].X;
             double y0 = BoundsPerLine[0].Y;
             double gap = GuiElement.scaled(1);
