@@ -30,6 +30,7 @@
     "alloy-ratio": "{0}–{1}%",
 
     "more-recipes": "...and {0} more. Refine via search or drill down through an intermediate item.",
+    "no-crafting-recipe": "No crafting recipe.",
     "no-recipes-found": "No recipes found for this item.",
     "no-usages-found": "No known usages for this item.",
 

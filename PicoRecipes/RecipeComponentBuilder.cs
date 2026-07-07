@@ -64,25 +64,15 @@ namespace PicoRecipes
             components.Add(new RichTextComponent(capi, stack.GetName() + "\n", CairoFont.WhiteSmallishText().WithWeight(FontWeight.Bold)));
             components.Add(new ClearFloatTextComponent(capi, 4));
 
-            // Skip the expensive process scan for the preview; grid/voxel/barrel recipes are indexed.
+            // The preview only ever shows how to MAKE the item (created-by), never its usages.
+            // Skip the expensive process scan; grid/voxel/barrel recipes are indexed.
             RecipeSections sections = index.GetCreatedBy(stack, includeProcesses: false);
-            bool usages = false;
-            if (sections.IsEmpty)
-            {
-                sections = index.GetUsedIn(stack);
-                usages = true;
-            }
 
             if (sections.IsEmpty)
             {
                 rowEstimate = 1;
-                components.Add(new RichTextComponent(capi, Loc.T("no-recipes-found", "No recipes found for this item."), CairoFont.WhiteDetailText()));
+                components.Add(new RichTextComponent(capi, Loc.T("no-crafting-recipe", "No crafting recipe."), CairoFont.WhiteDetailText()));
                 return components.ToArray();
-            }
-
-            if (usages)
-            {
-                components.Add(new RichTextComponent(capi, Loc.T("used-in-label", "Used in:") + "\n", CairoFont.WhiteDetailText().WithColor(GuiStyle.ColorParchment)));
             }
 
             AddAllSections(components, sections, stack, maxGridGroups: 4);

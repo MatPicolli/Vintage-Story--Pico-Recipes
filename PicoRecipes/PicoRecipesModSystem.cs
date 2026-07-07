@@ -137,7 +137,10 @@ namespace PicoRecipes
 
         bool ShowForHoveredStack(bool usages)
         {
-            ItemStack stack = capi.World?.Player?.InventoryManager?.CurrentHoveredSlot?.Itemstack;
+            // Prefer the item hovered in our own list (which suppresses the vanilla tooltip and so
+            // does not set CurrentHoveredSlot), then fall back to a real hovered inventory slot.
+            ItemStack stack = ItemListDialog.GetHoveredStack()
+                ?? capi.World?.Player?.InventoryManager?.CurrentHoveredSlot?.Itemstack;
             if (stack == null) return false;
 
             if (usages) BrowserDialog.ShowUsagesFor(stack);

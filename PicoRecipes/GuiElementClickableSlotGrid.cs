@@ -69,5 +69,26 @@ namespace PicoRecipes
             OnScrollPage?.Invoke(args.delta > 0 ? -1 : 1);
             args.SetHandled(true);
         }
+
+        /// <summary>
+        /// Track the hovered slot ourselves without calling the base implementation, which would
+        /// fire TriggerOnMouseEnterSlot and make the game draw its own item tooltip on top of our
+        /// hover preview. We only want our own popup, so we just update <see cref="hoverSlotId"/>
+        /// (used for the slot highlight and the preview) and skip the rest.
+        /// </summary>
+        public override void OnMouseMove(ICoreClientAPI api, MouseEvent args)
+        {
+            hoverSlotId = -1;
+            if (!Bounds.ParentBounds.PointInside(args.X, args.Y)) return;
+
+            for (int i = 0; i < SlotBounds.Length && i < renderedSlots.Count; i++)
+            {
+                if (SlotBounds[i].PointInside(args.X, args.Y))
+                {
+                    hoverSlotId = renderedSlots.GetKeyAtIndex(i);
+                    break;
+                }
+            }
+        }
     }
 }

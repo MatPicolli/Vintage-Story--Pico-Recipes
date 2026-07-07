@@ -88,7 +88,8 @@ namespace PicoRecipes
             SingleComposer?.Dispose();
             SingleComposer = capi.Gui
                 .CreateCompo("picorecipes-hover", dialogBounds)
-                .AddGameOverlay(bgBounds, new double[] { 0, 0, 0, 0.82 })
+                // Fully opaque so windows behind it (e.g. the browser's scrollbar) never show through.
+                .AddGameOverlay(bgBounds, new double[] { 0.1, 0.09, 0.08, 1 })
                 .BeginChildElements(bgBounds)
                     .BeginClip(clipBounds)
                         .AddRichtext(components, textBounds, "richtext")

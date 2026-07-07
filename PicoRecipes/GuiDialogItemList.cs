@@ -245,6 +245,14 @@ namespace PicoRecipes
             }
         }
 
+        /// <summary>The itemstack currently under the cursor in the item list, or null.</summary>
+        public ItemStack GetHoveredStack()
+        {
+            if (gridElem == null || !IsOpened() || inv == null) return null;
+            int id = gridElem.hoverSlotId;
+            return id >= 0 && id < inv.Count ? inv[id]?.Itemstack : null;
+        }
+
         /// <summary>Called every frame by the mod system to drive the hover preview popup.</summary>
         public void UpdateHoverPreview(float dt)
         {
